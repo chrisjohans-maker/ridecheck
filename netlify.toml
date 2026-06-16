@@ -1,0 +1,6 @@
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Surrogate-Control = "no-store"
+    CDN-Cache-Control = "no-store"
