@@ -17,7 +17,7 @@ export const FOOD_DB = [
   
   // ── Good ride foods ──
   {name:'Energy gel',preTiming:'15-30 min before',k:['gel','energy gel','gu','science in sport','sis gel'],score:82,when:'during',why:'Pure fast carbs designed for on-the-bike fueling. Take with water every 30-45 min on rides over 90 min.',nutrients:'Simple carbs, sodium, caffeine (some)'},
-  {name:'Energy bar',preTiming:'1-2 hrs before',k:['energy bar','cliff bar','clif bar','kind bar','granola bar','bar','protein bar'],score:80,when:'pre,during',why:'Portable carbs and calories. Choose higher carb bars for during-ride, higher protein for pre/post.',nutrients:'Carbs, some protein, varies'},
+  {name:'Energy bar',preTiming:'1-2 hrs before',k:['energy bar','cliff bar','clif bar','kind bar','granola bar'],score:80,when:'pre,during',why:'Portable carbs and calories. Choose higher carb bars for during-ride, higher protein for pre/post.',nutrients:'Carbs, some protein, varies'},
   {name:'Dates',preTiming:'30-60 min before',k:['dates','medjool','medjool dates'],score:88,when:'pre,during',why:'Nature\u0027s energy gel — concentrated fast carbs with potassium and magnesium. 2-3 dates = 1 gel.',nutrients:'Carbs, potassium, magnesium, fiber'},
   {name:'Rice cakes',k:['rice cake','rice cakes','rice bar'],score:83,when:'during',why:'Pro peloton favorite. Easy to make with jam or PB, gentle on the stomach at tempo.',nutrients:'Carbs, low fat'},
   {name:'Trail mix',preTiming:'1-2 hrs before',k:['trail mix','nuts and fruit','mixed nuts fruit'],score:75,when:'pre',why:'Good pre-ride snack. Nuts provide sustained energy. Avoid during hard efforts — fat slows digestion.',nutrients:'Healthy fats, protein, carbs'},
@@ -88,43 +88,30 @@ export const FOOD_DB = [
   {name:'Maple syrup',k:['maple syrup','maple'],score:75,when:'during',why:'Natural fuel that some ultra-endurance cyclists swear by. Mix into bottles or drizzle on rice cakes. Real maple only.',nutrients:'Simple carbs, manganese, zinc'},
 ];
 
+// True if `needle` appears as a whole word/phrase in `hay` (space/edge bounded).
+// Whole-word matching avoids substring collisions like "ice" matching "rice".
+function matchWord(hay, needle) {
+  if (!needle) return false;
+  const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|\\s)${esc}(\\s|$)`).test(hay);
+}
+
 export function matchFood(query) {
-  const q = query.toLowerCase().trim();
+  const q = (query || '').toLowerCase().trim();
   if (!q) return null;
-  
-  // Exact keyword match first
+
   let best = null;
-  let bestScore = 0;
-  
+  let bestLen = 0;
   for (const food of FOOD_DB) {
-    for (const k of food.k) {
-      if (q === k) return food; // exact match
-      if (q.includes(k) || k.includes(q)) {
-        const matchLen = Math.min(q.length, k.length);
-        if (matchLen > bestScore) { best = food; bestScore = matchLen; }
-      }
-    }
-    // Also check food name
-    const nameLower = food.name.toLowerCase();
-    if (q.includes(nameLower) || nameLower.includes(q)) {
-      const matchLen = Math.min(q.length, nameLower.length);
-      if (matchLen > bestScore) { best = food; bestScore = matchLen; }
-    }
-  }
-  
-  // Fuzzy: check if any word in query matches any keyword
-  if (!best) {
-    const words = q.split(/\s+/);
-    for (const food of FOOD_DB) {
-      for (const k of food.k) {
-        for (const w of words) {
-          if (w.length >= 3 && (k.includes(w) || w.includes(k))) {
-            return food;
-          }
-        }
+    const cands = [food.name.toLowerCase(), ...food.k];
+    for (const c of cands) {
+      if (q === c) return food; // exact name/keyword wins outright
+      // whole-word containment either direction; prefer the most specific (longest) match
+      if (matchWord(q, c) || matchWord(c, q)) {
+        const len = Math.min(q.length, c.length);
+        if (len > bestLen) { best = food; bestLen = len; }
       }
     }
   }
-  
   return best;
 }

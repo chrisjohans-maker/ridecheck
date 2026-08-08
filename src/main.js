@@ -4364,6 +4364,18 @@ function renderFoodTab() {
   const chipsEl = $('foodTabChips');
   const resultEl = $('foodTabResult');
   if (!catEl) return;
+
+  // Free-text food search (wired once; the input persists across re-renders).
+  const searchEl = $('foodTabSearch');
+  const searchResultEl = $('foodTabSearchResult');
+  if (searchEl && !searchEl._wired) {
+    searchEl._wired = true;
+    searchEl.addEventListener('input', () => {
+      const q = searchEl.value.trim();
+      if (!q) { if (searchResultEl) searchResultEl.innerHTML = ''; return; }
+      renderFoodResult(matchFood(q), searchResultEl); // null -> "Not in the database" card
+    });
+  }
   // Always recalculate smart picks (context changes with time/rides)
   const alreadyWired = catEl._wired;
 
