@@ -2582,6 +2582,9 @@ input, select, textarea { font-size: 16px !important; }
       <!-- ── TAB: LOG ── -->
       <div class="tab-pane" id="tabFood">
         <div style="padding:16px">
+          <input type="text" id="foodTabSearch" placeholder="🔍 Search any food — pizza, oatmeal, beer…" autocomplete="off" inputmode="search"
+            style="width:100%;padding:12px 14px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-family:inherit;font-size:16px;color:var(--text);-webkit-appearance:none;box-sizing:border-box;" />
+          <div id="foodTabSearchResult" style="margin-bottom:12px"></div>
           <div id="foodTabCategories"></div>
           <div class="food-chips" id="foodTabChips" style="margin-top:12px"></div>
           <div id="foodTabResult" style="margin-top:12px"></div>

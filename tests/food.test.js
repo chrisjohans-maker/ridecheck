@@ -25,4 +25,23 @@ describe('matchFood', () => {
     expect(banana).not.toBeNull();
     expect(banana.name).toBe('Banana');
   });
+
+  it('matches whole words, not substrings ("ice" is not "rice")', () => {
+    expect(matchFood('ice cream').name).toBe('Ice cream');
+    // "ice" alone should not resolve to Rice / Rice cakes via substring
+    const ice = matchFood('ice');
+    expect(ice === null || ice.name === 'Ice cream').toBe(true);
+  });
+
+  it('"protein bar" resolves to Protein bar, not Energy bar', () => {
+    expect(matchFood('protein bar').name).toBe('Protein bar');
+  });
+
+  it('finds a food embedded in a natural-language query', () => {
+    expect(matchFood('is pizza ok before a ride').name).toBe('Pizza');
+  });
+
+  it('matches keyword synonyms', () => {
+    expect(matchFood('yoghurt').name).toBe('Greek yogurt');
+  });
 });
