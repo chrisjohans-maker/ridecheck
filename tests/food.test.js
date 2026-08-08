@@ -10,6 +10,23 @@ describe('FOOD_DB', () => {
       expect(typeof f.score).toBe('number');
     }
   });
+
+  it('every food has merged macros (cal/carbs/protein/serving)', () => {
+    for (const f of FOOD_DB) {
+      expect(typeof f.cal).toBe('number');
+      expect(typeof f.carbs).toBe('number');
+      expect(typeof f.protein).toBe('number');
+      expect(typeof f.serving).toBe('string');
+    }
+  });
+
+  it('has sensible macros for known foods', () => {
+    const banana = FOOD_DB.find(f => f.name === 'Banana');
+    expect(banana.carbs).toBe(27);
+    expect(banana.cal).toBe(105);
+    const water = FOOD_DB.find(f => f.name === 'Water');
+    expect(water.cal).toBe(0);
+  });
 });
 
 describe('matchFood', () => {

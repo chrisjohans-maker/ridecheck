@@ -3590,7 +3590,16 @@ function renderFoodResult(food, targetEl) {
   ).join(' ');
   
   const verdict = food.score >= 80 ? 'Great choice' : food.score >= 65 ? 'Solid option' : food.score >= 45 ? 'Not ideal' : 'Skip this';
-  
+
+  // Macro row (per typical serving) when available
+  const macroRow = (food.cal != null) ? `
+    <div style="margin:10px 0 0;display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;">
+      <span style="font-size:0.68rem;color:var(--text-faint);">per ${escHtml(food.serving || 'serving')}</span>
+      <span style="font-family:var(--font-data);font-weight:700;font-size:0.92rem;color:var(--text);">${food.cal}<span style="font-size:0.64rem;font-weight:600;color:var(--text-faint);margin-left:2px;">cal</span></span>
+      <span style="font-family:var(--font-data);font-weight:700;font-size:0.92rem;color:var(--text);">${food.carbs}g<span style="font-size:0.64rem;font-weight:600;color:var(--text-faint);margin-left:2px;">carbs</span></span>
+      <span style="font-family:var(--font-data);font-weight:700;font-size:0.92rem;color:var(--text);">${food.protein}g<span style="font-size:0.64rem;font-weight:600;color:var(--text-faint);margin-left:2px;">protein</span></span>
+    </div>` : '';
+
   el.innerHTML = `
     <div class="food-card">
       <div class="food-card-top">
@@ -3602,7 +3611,8 @@ function renderFoodResult(food, targetEl) {
       </div>
       <div class="food-card-bar"><div class="food-card-bar-fill" style="width:${food.score}%;background:${scoreColor}"></div></div>
       <div style="margin:10px 0 8px;display:flex;gap:4px;flex-wrap:wrap">${timingPills}</div>
-      <div class="food-card-why">${escHtml(food.why)}</div>
+      ${macroRow}
+      <div class="food-card-why" style="margin-top:10px">${escHtml(food.why)}</div>
       <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">${nutrientTags}</div>
     </div>
   `;
