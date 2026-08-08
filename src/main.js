@@ -2494,15 +2494,16 @@ function renderLogInsights() {
 
   // ── Weekly distance — single-hue sequential bars, baseline-anchored, current week emphasized ──
   const HUE = '#5AA0E0';
+  const TRACK = 64; // px height of the bar track
   const maxMi = Math.max(...ins.weeks.map(w => w.mi), 0);
   let chart = '';
   if (maxMi > 0) {
     const bars = ins.weeks.map(w => {
-      const pct = Math.round((w.mi / maxMi) * 100);
-      const h = w.mi > 0 ? Math.max(6, pct) : 2;
+      // Pixel height (not %) so it doesn't depend on a definite-height flex parent.
+      const barPx = w.mi > 0 ? Math.max(4, Math.round((w.mi / maxMi) * TRACK)) : 2;
       const tip = `${w.label}: ${num(conv(w.mi))} ${uLabel}`;
-      return `<div title="${escHtml(tip)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;min-width:0;">
-        <div style="width:100%;max-width:22px;height:${h}%;background:${HUE};opacity:${w.isCurrent ? 1 : 0.5};border-radius:4px 4px 0 0;"></div>
+      return `<div title="${escHtml(tip)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0;">
+        <div style="width:100%;max-width:22px;height:${barPx}px;background:${HUE};opacity:${w.isCurrent ? 1 : 0.5};border-radius:4px 4px 0 0;"></div>
       </div>`;
     }).join('');
     const first = ins.weeks[0].label, last = ins.weeks[ins.weeks.length - 1].label;
