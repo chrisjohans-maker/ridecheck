@@ -12,6 +12,7 @@ import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
 import { computeInsights } from './lib/insights.js';
 import { updateAvailable } from './lib/version.js';
+import { parseBackup, mergeRides } from './lib/backup.js';
 
 // Build id baked in at build time (Vite `define`); 'dev' in un-built contexts.
 const RUNNING_BUILD = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
@@ -2856,6 +2857,20 @@ function setupSettings() {
     closeSettings();
   });
 
+  $('settingBackupLog')?.addEventListener('click', () => {
+    exportLogJSON();
+    closeSettings();
+  });
+
+  $('settingRestoreLog')?.addEventListener('click', () => {
+    $('importFileInput')?.click();
+  });
+  $('importFileInput')?.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) importLogFile(file);
+    e.target.value = ''; // allow re-importing the same file
+  });
+
   $('settingClearLog')?.addEventListener('click', () => {
     if (confirm('Delete all logged rides? This cannot be undone.')) {
       localStorage.removeItem('ridecheck_log');
@@ -2898,6 +2913,35 @@ function closeSettings() {
   } else {
     $('settingsOverlay').classList.add('hidden');
   }
+}
+
+function exportLogJSON() {
+  const log = getRideLog();
+  if (!log.length) { showToast('No rides to back up'); return; }
+  const payload = JSON.stringify({ app: 'ridecheck', type: 'ridelog', version: 1, exportedAt: new Date().toISOString(), rides: log }, null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ridecheck-backup.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Backup downloaded — keep it safe');
+}
+
+function importLogFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const res = parseBackup(String(reader.result));
+    if (!res.ok) { showToast('Import failed: ' + res.error); return; }
+    const { merged, added } = mergeRides(getRideLog(), res.rides);
+    saveRideLog(merged);
+    renderLogEntries();
+    updateLogSubtitle();
+    if (typeof renderLogStats === 'function') renderLogStats();
+    showToast(added ? `Restored ${added} ride${added !== 1 ? 's' : ''}` : 'No new rides (already in your log)');
+  };
+  reader.onerror = () => showToast('Could not read that file');
+  reader.readAsText(file);
 }
 
 function exportLogCSV() {
