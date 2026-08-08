@@ -9,6 +9,7 @@ import { estimateDuration as _estimateDuration, getDurationBucket } from './lib/
 import { buildFuelingPlan, buildNutritionPlan } from './lib/fueling.js';
 import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
+import { windStrategy, latestSafeStart } from './lib/advice.js';
 
 // Thin wrappers: read the global appState and delegate to the pure cores above.
 function toDisplay(tempF) { return _toDisplay(tempF, appState.tempUnit); }
@@ -891,6 +892,38 @@ function renderBestWindow(hourly) {
 }
 
 // ─── RENDER ALL ───────────────────────────────────────────────
+function renderRideTips(current, daily) {
+  const el = $('rideTips');
+  if (!el) return;
+  if (!current) { el.setAttribute('style', 'display:none'); return; }
+
+  const tips = [];
+
+  // Wind strategy (only when meaningful)
+  const ws = windStrategy(current.wind_speed_10m, current.wind_direction_10m);
+  if (ws && ws.level !== 'calm') tips.push({ icon: '🧭', text: ws.text });
+
+  // Latest safe start — uses the entered distance, else assumes 25 mi (shown in the text)
+  const distMi = appState.distanceMi || 25;
+  const durationMins = estimateDuration(distMi, appState.rideType);
+  const sunsetRaw = daily?.sunset?.[0];
+  const sunsetHourF = sunsetRaw ? (new Date(sunsetRaw).getHours() + new Date(sunsetRaw).getMinutes() / 60) : null;
+  const ss = latestSafeStart(durationMins, sunsetHourF, locationNow().hourF);
+  if (ss) {
+    const suffix = appState.distanceMi ? '' : ` (${Math.round(distMi)} mi)`;
+    tips.push({ icon: ss.feasible ? '🌇' : '🔦', text: ss.text + suffix });
+  }
+
+  if (!tips.length) { el.setAttribute('style', 'display:none'); return; }
+  el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:12px 18px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px;');
+  el.innerHTML = tips.map(t =>
+    `<div style="display:flex;align-items:center;gap:10px;font-size:0.9rem;color:var(--text-muted);line-height:1.4;">
+      <span style="font-size:1.05rem;line-height:1;flex-shrink:0;">${t.icon}</span>
+      <span>${escHtml(t.text)}</span>
+    </div>`
+  ).join('');
+}
+
 function renderNowcast(minutely15) {
   const el = $('precipNowcast');
   if (!el) return;
@@ -936,6 +969,7 @@ function renderAll() {
       return { score, factors };
     },
     () => renderNowcast(weather.minutely_15),
+    () => renderRideTips(current, weather.daily),
     (ctx) => renderQuickStats(current, weather.daily),
     () => renderSunRow(weather.daily),
     () => renderAirQuality(airQuality),
