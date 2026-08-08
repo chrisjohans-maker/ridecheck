@@ -7,6 +7,7 @@ import { locationNow as _locationNow } from './lib/time.js';
 import { FOOD_DB, matchFood } from './lib/food.js';
 import { estimateDuration as _estimateDuration, getDurationBucket } from './lib/duration.js';
 import { buildFuelingPlan, buildNutritionPlan } from './lib/fueling.js';
+import { weatherPenalty } from './lib/scoring.js';
 
 // Thin wrappers: read the global appState and delegate to the pure cores above.
 function toDisplay(tempF) { return _toDisplay(tempF, appState.tempUnit); }
@@ -802,62 +803,8 @@ function calcBestWindow(hourly) {
 
     let score = 100;
 
-    // Temperature
-    if (fl >= 62 && fl <= 72) {}
-    else if (fl > 72 && fl <= 78) score -= 3;
-    else if (fl >= 55 && fl < 62) score -= 3;
-    else if (fl > 78 && fl <= 85) score -= 8;
-    else if (fl >= 45 && fl < 55) score -= 8;
-    else if (fl > 85 && fl <= 90) score -= 20;
-    else if (fl >= 32 && fl < 45) score -= 20;
-    else if (fl > 90 && fl <= 95) score -= 32;
-    else if (fl > 95) score -= 45;
-    else if (fl < 32) score -= 40;
-
-    // Humidity
-    if (humid > 85) score -= 12;
-    else if (humid > 75) score -= 8;
-    else if (humid > 65) score -= 5;
-    else if (humid > 50) score -= 2;
-
-    // Humidity x heat
-    if (fl > 90 && humid > 50) score -= 15;
-    else if (fl > 85 && humid > 60) score -= 10;
-    else if (fl > 80 && humid > 70) score -= 8;
-
-    // Wind
-    if (wind < 8) {}
-    else if (wind < 12) score -= 3;
-    else if (wind < 16) score -= 8;
-    else if (wind < 20) score -= 15;
-    else if (wind < 25) score -= 25;
-    else score -= 40;
-
-    // Precipitation
-    if ([95,96,99].includes(code)) score -= 50;
-    else if ([56,57,66,67].includes(code)) score -= 50; // freezing rain/ice — dangerous
-    else if ([65,82].includes(code)) score -= 35;
-    else if ([63,81].includes(code)) score -= 25;
-    else if ([55].includes(code)) score -= 18;
-    else if ([51,53,61,80].includes(code)) score -= 12;
-    else if ([71,73,75].includes(code)) score -= 45;
-    else if ([45,48].includes(code)) score -= 12;
-
-    // Rain probability
-    if (![51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75].includes(code)) {
-      if (pop > 70) score -= 22;
-      else if (pop > 50) score -= 15;
-      else if (pop > 30) score -= 8;
-      else if (pop > 10) score -= 3;
-    }
-
-    // Sky
-    if (code === 0) score += 2;
-    else if (code === 3) score -= 3;
-
-    // UV
-    if (uv >= 8) score -= 8;
-    else if (uv >= 6) score -= 3;
+    // Shared weather brackets (temp/humidity/wind/precip/rain-prob/sky/UV) — see src/lib/scoring.js
+    score += weatherPenalty({ fl, humid, wind, code, pop, uv });
 
     // Near sunset
     if (tHour >= sunsetH) score -= 15;
@@ -4168,64 +4115,8 @@ function renderWeekForecast(daily) {
         const uvH = hourly.uv_index?.[hi] ?? 0;
         
         let hs = 100;
-        
-        // Temperature (same brackets as calcConfidence)
-        if (fl >= 62 && fl <= 72)           {}
-        else if (fl > 72 && fl <= 78)       hs -= 3;
-        else if (fl >= 55 && fl < 62)       hs -= 3;
-        else if (fl > 78 && fl <= 85)       hs -= 8;
-        else if (fl >= 45 && fl < 55)       hs -= 8;
-        else if (fl > 85 && fl <= 90)       hs -= 20;
-        else if (fl >= 32 && fl < 45)       hs -= 20;
-        else if (fl > 90 && fl <= 95)       hs -= 32;
-        else if (fl > 95)                   hs -= 45;
-        else if (fl < 32)                   hs -= 40;
-        
-        // Humidity (standalone)
-        if (humidH > 85)                    hs -= 12;
-        else if (humidH > 75)               hs -= 8;
-        else if (humidH > 65)               hs -= 5;
-        else if (humidH > 50)               hs -= 2;
-        
-        // Humidity x heat
-        if (fl > 90 && humidH > 50)         hs -= 15;
-        else if (fl > 85 && humidH > 60)    hs -= 10;
-        else if (fl > 80 && humidH > 70)    hs -= 8;
-        
-        // Wind
-        if (windH < 8)                      {}
-        else if (windH < 12)                hs -= 3;
-        else if (windH < 16)                hs -= 8;
-        else if (windH < 20)                hs -= 15;
-        else if (windH < 25)                hs -= 25;
-        else                                hs -= 40;
-        
-        // Precipitation
-        if ([95,96,99].includes(codeH))     hs -= 50;
-        else if ([56,57,66,67].includes(codeH)) hs -= 50; // freezing rain/ice
-        else if ([65,82].includes(codeH))   hs -= 35;
-        else if ([63,81].includes(codeH))   hs -= 25;
-        else if ([55].includes(codeH))      hs -= 18;
-        else if ([51,53,61,80].includes(codeH)) hs -= 12;
-        else if ([71,73,75].includes(codeH)) hs -= 45;
-        else if ([45,48].includes(codeH))   hs -= 12;
-
-        // Rain probability (if not raining)
-        if (![51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75].includes(codeH)) {
-          if (pop > 70)                     hs -= 22;
-          else if (pop > 50)                hs -= 15;
-          else if (pop > 30)                hs -= 8;
-          else if (pop > 10)                hs -= 3;
-        }
-        
-        // Sky conditions
-        if (codeH === 0)                    hs += 2;
-        else if (codeH === 3)               hs -= 3;
-        
-        // UV
-        if (uvH >= 8)                       hs -= 8;
-        else if (uvH >= 6)                  hs -= 3;
-        
+        // Shared weather brackets — see src/lib/scoring.js
+        hs += weatherPenalty({ fl, humid: humidH, wind: windH, code: codeH, pop, uv: uvH });
         hourScores.push(Math.max(0, Math.min(100, hs)));
       });
       
