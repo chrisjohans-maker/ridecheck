@@ -3058,6 +3058,10 @@ const WMO_CODES = {
   61: { label:"Light rain",          icon:"🌧️", rain:true  },
   63: { label:"Rain",                icon:"🌧️", rain:true  },
   65: { label:"Heavy rain",          icon:"🌧️", rain:true  },
+  56: { label:"Freezing drizzle",    icon:"🧊",  rain:true  },
+  57: { label:"Freezing drizzle",    icon:"🧊",  rain:true  },
+  66: { label:"Freezing rain",       icon:"🧊",  rain:true  },
+  67: { label:"Freezing rain",       icon:"🧊",  rain:true  },
   71: { label:"Light snow",          icon:"🌨️", rain:false },
   73: { label:"Snow",                icon:"❄️",  rain:false },
   75: { label:"Heavy snow",          icon:"❄️",  rain:false },
@@ -3114,6 +3118,29 @@ function fetchWithTimeout(url, opts, ms) {
   const timer = setTimeout(() => controller.abort(), ms);
   return fetch(url, { ...opts, signal: controller.signal })
     .finally(() => clearTimeout(timer));
+}
+
+// Current wall-clock time at the *searched location*, using Open-Meteo's utc_offset_seconds.
+// Forecast time strings (Open-Meteo + our NWS mapping) are location-local naive, so comparing
+// them against the device clock is wrong whenever the user checks a location in another timezone.
+// Falls back to device time until the offset is known.
+function locationNow() {
+  const off = appState.weather?.utc_offset_seconds;
+  const now = new Date();
+  let y, mo, d, h, mi;
+  if (typeof off === 'number') {
+    const s = new Date(now.getTime() + off * 1000); // this Date's UTC fields == location wall clock
+    y = s.getUTCFullYear(); mo = s.getUTCMonth(); d = s.getUTCDate(); h = s.getUTCHours(); mi = s.getUTCMinutes();
+  } else {
+    y = now.getFullYear(); mo = now.getMonth(); d = now.getDate(); h = now.getHours(); mi = now.getMinutes();
+  }
+  const pad = n => String(n).padStart(2, '0');
+  return {
+    date: y + '-' + pad(mo + 1) + '-' + pad(d), // "2026-08-08" in location time
+    hour: h,
+    hourF: h + mi / 60,
+    wall: new Date(y, mo, d, h, mi), // local Date, comparable to new Date(naiveForecastString)
+  };
 }
 
 // ─── STORAGE HELPERS ──────────────────────────────────────────
@@ -3605,7 +3632,7 @@ async function fetchSuggestions(query) {
 
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=6&addressdetails=1&featuretype=city,town,village,postcode`;
-    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } }, 8000);
     const data = await res.json();
     _acResults = data.map(d => {
       const addr = d.address || {};
@@ -3673,9 +3700,12 @@ function hideDropdown() {
 
 // Run check using a pre-resolved geo object (from autocomplete)
 async function runCheckFromGeo(geo) {
+  // Request-sequence guard: if the user picks another location mid-fetch, the older
+  // (slower) response must not overwrite/merge into the newer one.
+  const myReq = appState._reqSeq = (appState._reqSeq || 0) + 1;
+  const isCurrent = () => myReq === appState._reqSeq;
   showLoading('Fetching weather & air quality…');
   try {
-    appState.geo = geo;
     $('postalInput').value = geo.city || geo.label;
 
     const [weather, airQuality, elevationM] = await Promise.all([
@@ -3683,6 +3713,8 @@ async function runCheckFromGeo(geo) {
       fetchAirQuality(geo.lat, geo.lon),
       fetchElevation(geo.lat, geo.lon),
     ]);
+    if (!isCurrent()) return; // superseded by a newer check
+    appState.geo = geo;
     appState.weather    = weather;
     appState._lastFetchTime = Date.now();
     appState.airQuality = airQuality;
@@ -3693,6 +3725,7 @@ async function runCheckFromGeo(geo) {
     if (isUS) {
       try {
         const nws = await fetchNWSForecast(geo.lat, geo.lon);
+        if (!isCurrent()) return; // superseded while waiting on NWS
         if (nws) {
           // Keep Open-Meteo current conditions + sunrise/sunset + UV
           // Override hourly and daily with NWS data
@@ -3710,7 +3743,7 @@ async function runCheckFromGeo(geo) {
           
           console.log('NWS forecast data merged successfully');
           // Also override current weather code with NWS current hour data
-          const nowHour = new Date().getHours();
+          const nowHour = locationNow().hour; // NWS times are location-local, so use location hour
           const nwsHourIdx = nws.hourly.time.findIndex(t => {
             const h = parseInt(t.split('T')[1]);
             return h === nowHour;
@@ -3718,17 +3751,18 @@ async function runCheckFromGeo(geo) {
           if (nwsHourIdx >= 0) {
             appState.weather.current.weather_code = nws.hourly.weather_code[nwsHourIdx];
             // Also update current temp and wind from NWS if available
-            if (nws.hourly.temperature_2m[nwsHourIdx]) {
+            // Use != null so legitimate zeros (0°F, calm wind, due-north 0°, 0% humidity) aren't dropped
+            if (nws.hourly.temperature_2m[nwsHourIdx] != null) {
               appState.weather.current.temperature_2m = nws.hourly.temperature_2m[nwsHourIdx];
               appState.weather.current.apparent_temperature = nws.hourly.temperature_2m[nwsHourIdx];
             }
-            if (nws.hourly.wind_speed_10m[nwsHourIdx]) {
+            if (nws.hourly.wind_speed_10m[nwsHourIdx] != null) {
               appState.weather.current.wind_speed_10m = nws.hourly.wind_speed_10m[nwsHourIdx];
             }
-            if (nws.hourly.relative_humidity_2m[nwsHourIdx]) {
+            if (nws.hourly.relative_humidity_2m[nwsHourIdx] != null) {
               appState.weather.current.relative_humidity_2m = nws.hourly.relative_humidity_2m[nwsHourIdx];
             }
-            if (nws.hourly.wind_direction_10m[nwsHourIdx]) {
+            if (nws.hourly.wind_direction_10m[nwsHourIdx] != null) {
               appState.weather.current.wind_direction_10m = nws.hourly.wind_direction_10m[nwsHourIdx];
             }
             console.log('NWS current hour override applied');
@@ -3737,6 +3771,7 @@ async function runCheckFromGeo(geo) {
       } catch(e) { console.warn('NWS merge failed:', e); }
     }
 
+    if (!isCurrent()) return; // superseded — let the newer check own the UI
     hideLoading();
     // Only switch to app view if still on search screen
     if (!$('screenApp')?.classList.contains('active')) {
@@ -3777,7 +3812,7 @@ async function runCheckFromQuery(query) {
 
 async function geocodeFreeText(query) {
   const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&addressdetails=1`;
-  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } }, 8000);
   const data = await res.json();
   if (!data.length) return null;
   const d = data[0];
@@ -3803,8 +3838,9 @@ function loadTrailsAndShops(geo) {
 function calcBestWindow(hourly) {
   if (!hourly?.time?.length) return null;
 
-  const nowHour = new Date().getHours();
-  const nd = new Date(); const nowDate = nd.getFullYear()+'-'+String(nd.getMonth()+1).padStart(2,'0')+'-'+String(nd.getDate()).padStart(2,'0');
+  const ln = locationNow();
+  const nowHour = ln.hour;
+  const nowDate = ln.date;
 
   // Get sunset/sunrise hours
   const sunsetRaw = appState.weather?.daily?.sunset?.[0];
@@ -3869,6 +3905,7 @@ function calcBestWindow(hourly) {
 
     // Precipitation
     if ([95,96,99].includes(code)) score -= 50;
+    else if ([56,57,66,67].includes(code)) score -= 50; // freezing rain/ice — dangerous
     else if ([65,82].includes(code)) score -= 35;
     else if ([63,81].includes(code)) score -= 25;
     else if ([55].includes(code)) score -= 18;
@@ -3877,7 +3914,7 @@ function calcBestWindow(hourly) {
     else if ([45,48].includes(code)) score -= 12;
 
     // Rain probability
-    if (![51,53,55,61,63,65,80,81,82,95,96,99,71,73,75].includes(code)) {
+    if (![51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75].includes(code)) {
       if (pop > 70) score -= 22;
       else if (pop > 50) score -= 15;
       else if (pop > 30) score -= 8;
@@ -4061,7 +4098,7 @@ function switchToApp(geo) {
 // ─── GEOCODING ────────────────────────────────────────────────
 async function geocodePostal(postal) {
   const url = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(postal)}&format=json&limit=1&addressdetails=1`;
-  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'en' } }, 8000);
   const data = await res.json();
   if (!data.length) return null;
   const d = data[0];
@@ -4084,6 +4121,8 @@ function nwsTextToWMO(text) {
   if (/(?:^|\s)thunderstorm/.test(t) && !/slight chance|isolated|chance/.test(t)) return 95;
   if (/thunder/.test(t) && /slight chance|isolated/.test(t)) return 2;
   if (/thunder/.test(t) && /chance|likely/.test(t)) return 80;
+  // Freezing/ice must be checked BEFORE plain rain — "Freezing Rain" contains "rain"
+  if (/freezing|sleet|ice pellets|wintry mix/.test(t)) return 66;
   if (/heavy.*rain|heavy.*shower/.test(t)) return 65;
   if (/(?:rain|shower)/.test(t) && /slight chance|isolated/.test(t)) return 2;
   if (/(?:rain|shower)/.test(t) && /chance/.test(t)) return 61;
@@ -4092,7 +4131,6 @@ function nwsTextToWMO(text) {
   if (/drizzle/.test(t)) return 51;
   if (/heavy.*snow|blizzard/.test(t)) return 75;
   if (/snow/.test(t)) return 71;
-  if (/sleet|ice|freezing/.test(t)) return 66;
   if (/fog|mist|haze/.test(t)) return 45;
   if (/mostly cloudy/.test(t)) return 3;
   if (/overcast|cloudy/.test(t)) return 3;
@@ -4106,12 +4144,12 @@ function nwsDir(d) { return {N:0,NNE:22,NE:45,ENE:67,E:90,ESE:112,SE:135,SSE:157
 
 async function fetchNWSForecast(lat, lon) {
   try {
-    const pr = await fetch('https://api.weather.gov/points/' + lat.toFixed(4) + ',' + lon.toFixed(4), { headers: { 'User-Agent': 'RideCheck Cycling App (ridecheckforvampires.netlify.app)' } });
+    const pr = await fetchWithTimeout('https://api.weather.gov/points/' + lat.toFixed(4) + ',' + lon.toFixed(4), { headers: { 'User-Agent': 'RideCheck Cycling App (ridecheckforvampires.netlify.app)' } }, 8000);
     if (!pr.ok) return null;
     const pts = await pr.json();
     const hUrl = pts.properties?.forecastHourly;
     if (!hUrl) return null;
-    const hr = await fetch(hUrl + '?units=us', { headers: { 'User-Agent': 'RideCheck Cycling App (ridecheckforvampires.netlify.app)' } });
+    const hr = await fetchWithTimeout(hUrl + '?units=us', { headers: { 'User-Agent': 'RideCheck Cycling App (ridecheckforvampires.netlify.app)' } }, 8000);
     if (!hr.ok) return null;
     const hd = await hr.json();
     const periods = hd.properties?.periods;
@@ -4119,8 +4157,8 @@ async function fetchNWSForecast(lat, lon) {
 
     const time=[],temp=[],wc=[],pop=[],ws=[],wd=[],rh=[];
     periods.forEach(p => {
-      const dt = new Date(p.startTime);
-      time.push(dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0')+'T'+String(dt.getHours()).padStart(2,'0')+':00:00');
+      // startTime is offset-aware (e.g. ...T23:00:00-05:00); slice the location-local wall clock directly
+      time.push(p.startTime.slice(0,13)+':00:00');
       temp.push(p.temperature); wc.push(nwsTextToWMO(p.shortForecast));
       pop.push(p.probabilityOfPrecipitation?.value ?? 0);
       ws.push(nwsWind(p.windSpeed)); wd.push(nwsDir(p.windDirection));
@@ -4129,7 +4167,7 @@ async function fetchNWSForecast(lat, lon) {
 
     const days = {};
     periods.forEach(p => {
-      const dk = new Date(p.startTime).toISOString().slice(0,10);
+      const dk = p.startTime.slice(0,10); // location-local calendar date, not UTC
       if (!days[dk]) days[dk]={t:[],w:[],c:[],h:[]};
       days[dk].t.push(p.temperature); days[dk].w.push(nwsWind(p.windSpeed));
       days[dk].c.push(nwsTextToWMO(p.shortForecast)); days[dk].h.push(p.relativeHumidity?.value??50);
@@ -4156,8 +4194,11 @@ async function fetchWeather(lat, lon) {
     `&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,wind_speed_10m,wind_direction_10m,relative_humidity_2m,uv_index` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,wind_speed_10m_max,sunrise,sunset,uv_index_max,relative_humidity_2m_max` +
     `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=8${modelParam}`;
-  const res = await fetch(url);
-  return res.json();
+  const res = await fetchWithTimeout(url, {}, 8000);
+  if (!res.ok) throw new Error('Open-Meteo forecast HTTP ' + res.status);
+  const data = await res.json();
+  if (!data || data.error) throw new Error('Open-Meteo forecast error: ' + (data && data.reason || 'unknown'));
+  return data;
 }
 
 // ─── AIR QUALITY ──────────────────────────────────────────────
@@ -4169,7 +4210,7 @@ async function fetchAirQuality(lat, lon) {
       const anUrl = 'https://www.airnowapi.org/aq/observation/latLong/current/?format=application/json' +
         '&latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4) +
         '&distance=50&API_KEY=E9FB473C-01CB-4AEC-A21C-7A709561810D';
-      const res = await fetch(anUrl);
+      const res = await fetchWithTimeout(anUrl, {}, 8000);
       if (res.ok) {
         const data = await res.json();
         if (data && data.length) {
@@ -4192,8 +4233,11 @@ async function fetchAirQuality(lat, lon) {
   // Fallback: Open-Meteo (non-US or AirNow failure)
   try {
     const url = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + lat + '&longitude=' + lon + '&current=us_aqi,pm2_5,pm10';
-    const res = await fetch(url);
-    return res.json();
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.error) return null;
+    return data;
   } catch(e) { return null; }
 }
 
@@ -4201,7 +4245,8 @@ async function fetchAirQuality(lat, lon) {
 async function fetchElevation(lat, lon) {
   try {
     const url = `https://api.open-meteo.com/v1/elevation?latitude=${lat}&longitude=${lon}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 8000);
+    if (!res.ok) return null;
     const data = await res.json();
     return data.elevation?.[0] ?? null;
   } catch { return null; }
@@ -4928,9 +4973,11 @@ function buildNutritionPlan(current, distanceMi, rideType, weightKg, intensity) 
   const metValues = { road:8.0, gravel:7.5, mtb:8.5, commute:5.5 };
   const intensityMult = intensity === 'easy' ? 0.78 : intensity === 'hard' ? 1.25 : 1.0;
   const met = (metValues[rideType] || 7) * intensityMult;
+  const ebikeAdj = appState.bikeType === 'ebike' ? 0.55 : 1.0; // assisted effort burns/uses ~half
 
-  const caloriesBurned = Math.round(met * weightKg * hrs * elevationCalorieMult());
-  const sweatRatePerHour = Math.round((isHot ? 1050 : isWarm ? 750 : humid > 75 ? 700 : 500) * elevationHydrationMult());
+  const caloriesBurned = Math.round(met * weightKg * hrs * elevationCalorieMult() * ebikeAdj);
+  // Scale sweat by rider weight and intensity to match buildFuelingPlan (was fixed at ~70kg/moderate)
+  const sweatRatePerHour = Math.round((isHot ? 1050 : isWarm ? 750 : humid > 75 ? 700 : 500) * (weightKg / 70) * intensityMult * elevationHydrationMult());
   const sweatLossMl = Math.round(sweatRatePerHour * hrs);
   const fluidOz = Math.round(sweatLossMl * 0.0338);
   const carbsG = Math.round((caloriesBurned * 0.55) / 4);
@@ -5263,16 +5310,10 @@ function updateTimestamp() {
       if (!appState.geo) return;
       el.textContent = 'Refreshing…';
       try {
-        const [weather, airQuality] = await Promise.all([
-          fetchWeather(appState.geo.lat, appState.geo.lon),
-          fetchAirQuality(appState.geo.lat, appState.geo.lon),
-        ]);
-        appState.weather = weather;
-        appState.airQuality = airQuality;
-        // Save fetch time
+        // Use the full check path so US locations get the NWS merge (not raw Open-Meteo)
+        await runCheckFromGeo(appState.geo);
         const last = getLastUsed();
         if (last) { last.fetchedAt = Date.now(); localStorage.setItem('ridecheck_last', JSON.stringify(last)); }
-        renderAll();
         updateTimestamp();
       } catch(e) {
         el.textContent = 'Refresh failed';
@@ -5718,6 +5759,8 @@ function renderLogStats() {
   const rideDays = new Set(log.map(e => new Date(e.date).toDateString()));
   let streak = 0;
   const check = new Date();
+  // Grace: if today hasn't been ridden yet, start counting from yesterday so the streak doesn't reset mid-day.
+  if (!rideDays.has(check.toDateString())) check.setDate(check.getDate() - 1);
   while (rideDays.has(check.toDateString())) {
     streak++;
     check.setDate(check.getDate() - 1);
@@ -6016,6 +6059,11 @@ function closeSettings() {
 function exportLogCSV() {
   const log = getRideLog();
   if (!log.length) { showToast('No rides to export'); return; }
+  // RFC-4180 escaping: quote any field with a comma, quote, or newline; double internal quotes.
+  const csvCell = v => {
+    const s = String(v ?? '');
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
   const headers = ['Date','Bike','Ride type','Distance (mi)','Duration (min)','Feel','Location','Temp (°F)','Weather','Notes'];
   const rows = log.map(e => [
     new Date(e.date).toLocaleString(),
@@ -6027,9 +6075,9 @@ function exportLogCSV() {
     e.location || '',
     e.tempF ? Math.round(e.tempF) : '',
     e.weatherLabel || '',
-    (e.notes || '').replace(/,/g, ';'),
+    e.notes || '',
   ]);
-  const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+  const csv = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -6678,7 +6726,7 @@ function renderWeeklyGoal() {
 
   const pct = Math.min(100, Math.round((weekMi / effectiveGoal) * 100));
   const exceeded = weekMi >= effectiveGoal;
-  const unit = appState.distUnit === 'km' ? 'km' : 'mi';
+  const unit = appState.unit === 'km' ? 'km' : 'mi';
   const weekDisplay = unit === 'km' ? Math.round(weekMi * 1.60934) : Math.round(weekMi);
   const goalDisplay = unit === 'km' ? Math.round(effectiveGoal * 1.60934) : effectiveGoal;
 
@@ -6720,6 +6768,7 @@ function calcStreak(log) {
   const now = new Date();
   let streak = 0;
   let checkWeek = new Date(now);
+  let firstWeek = true; // the current week may still be empty early on — don't break the streak for it
 
   while (true) {
     const weekStart = new Date(checkWeek);
@@ -6736,6 +6785,11 @@ function calcStreak(log) {
     if (hasRide) {
       streak++;
       checkWeek.setDate(checkWeek.getDate() - 7);
+      firstWeek = false;
+    } else if (firstWeek) {
+      // No ride yet this (partial) week — skip it without ending the streak.
+      checkWeek.setDate(checkWeek.getDate() - 7);
+      firstWeek = false;
     } else {
       break;
     }
@@ -6978,7 +7032,7 @@ function renderFoodCategories() {
     { id:'during', label:'\u{1F6B4} During',     filter: f => f.when.includes('during') },
     { id:'post',   label:'\u{1F3C1} Recovery',   filter: f => f.when.includes('post') },
     { id:'avoid',  label:'\u26A0\uFE0F Avoid',  filter: f => f.when === 'avoid' },
-    { id:'snacks', label:'\u{1F34C} Snacks',    filter: f => ['Banana', 'Apple', 'Trail mix', 'Dates', 'Granola', 'Fig bar', 'Energy bar', 'Peanut butter', 'Gummy bears', 'Chocolate chip cookie', 'Jerky', 'Stroopwafel', 'Clif Bloks', 'Protein bar', 'Pickles', 'Yogurt', 'Toast', 'Bagel'].includes(f.name) },
+    { id:'snacks', label:'\u{1F34C} Snacks',    filter: f => ['Banana', 'Nuts', 'Trail mix', 'Dates', 'Granola', 'Fig bar', 'Energy bar', 'Peanut butter', 'Gummy bears', 'Chocolate chip cookie', 'Jerky', 'Stroopwafel', 'Clif Bloks', 'Protein bar', 'Pickles', 'Greek yogurt', 'Peanut butter toast', 'Bagel'].includes(f.name) },
   ];
 
   catEl.innerHTML = `
@@ -7170,11 +7224,14 @@ async function fetchStravaActivities(page = 1, perPage = 30) {
 function stravaActivityToLogEntry(activity) {
   const distMi = (activity.distance || 0) * 0.000621371;
   const durationMins = Math.round((activity.moving_time || 0) / 60);
-  const date = new Date(activity.start_date_local || activity.start_date);
+  // Strava's start_date_local is wall-clock time with a misleading 'Z'; store it as a
+  // local-naive string (no Z) to match manual entries, so new Date(e.date) reads it back correctly.
+  const date = (activity.start_date_local || activity.start_date || '').replace('Z', '').slice(0, 19);
 
   return {
-    id: Date.now() + Math.random(),
-    date: date.toISOString(),
+    // Integer id (Strava's stable activity id) so parseInt() in the delete/edit handlers matches.
+    id: activity.id || Math.floor(Date.now() + Math.random() * 100000),
+    date: date,
     distanceVal: Math.round(distMi * 10) / 10,
     distanceUnit: 'mi',
     distanceMi: distMi,
@@ -7392,6 +7449,7 @@ function calcConfidence(current, hourly, daily) {
 
   // ── PRECIPITATION ──
   if ([95,96,99].includes(code))      { score -= 50; factors.push({ text: 'Thunderstorms — stay inside', level: 'bad' }); }
+  else if ([56,57,66,67].includes(code)) { score -= 50; factors.push({ text: 'Freezing rain / ice — do not ride', level: 'bad' }); }
   else if ([65,82].includes(code))    { score -= 35; factors.push({ text: 'Heavy rain', level: 'bad' }); }
   else if ([63,81].includes(code))    { score -= 25; factors.push({ text: 'Rain', level: 'bad' }); }
   else if ([55].includes(code))       { score -= 18; factors.push({ text: 'Heavy drizzle', level: 'warn' }); }
@@ -7400,8 +7458,8 @@ function calcConfidence(current, hourly, daily) {
   else if ([45,48].includes(code))    { score -= 12; factors.push({ text: 'Fog — reduced visibility', level: 'warn' }); }
 
   // ── RAIN PROBABILITY (current hour) ──
-  if (![51,53,55,61,63,65,80,81,82,95,96,99,71,73,75].includes(code)) {
-    const hour = new Date().getHours();
+  if (![51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75].includes(code)) {
+    const hour = locationNow().hour;
     const hrIdx = hourly?.time?.findIndex(t => new Date(t).getHours() === hour);
     const pop = hrIdx >= 0 ? (hourly.precipitation_probability?.[hrIdx] ?? 0) : 0;
     if (pop > 70)      { score -= 22; factors.push({ text: `${pop}% rain chance`, level: 'bad' }); }
@@ -7419,8 +7477,7 @@ function calcConfidence(current, hourly, daily) {
   else if (uv >= 6)    { score -= 3; factors.push({ text: `High UV (${uv})`, level: 'warn' }); }
 
   // ── DAYLIGHT ──
-  const now = new Date();
-  const hour = now.getHours() + now.getMinutes() / 60;
+  const hour = locationNow().hourF;
   const sunriseRaw = daily?.sunrise?.[0];
   const sunsetRaw  = daily?.sunset?.[0];
   const sunriseHour = sunriseRaw ? new Date(sunriseRaw).getHours() + new Date(sunriseRaw).getMinutes()/60 : 6;
@@ -7545,7 +7602,7 @@ function renderAirQuality(aq) {
 
 function renderHourly(hourly) {
   if (!$('hourlyStrip')) return;
-  const now = new Date();
+  const now = locationNow().wall; // location wall clock, comparable to new Date(naive forecast string)
   const items = hourly.time
     .map((t,i) => ({ time:new Date(t), temp:(hourly.apparent_temperature?.[i] ?? hourly.temperature_2m[i]), code:hourly.weather_code[i], pop:hourly.precipitation_probability[i] }))
     .filter(h => h.time > now).slice(0,8);
@@ -7578,10 +7635,12 @@ function renderWeekForecast(daily) {
     // Score each rideable hour, then use the best 3-hour window
     const hourly = appState.weather?.hourly;
     let score = 0;
-    
+    let hourScores = null;      // hoisted out of the if-block so the timing-verdict logic below can read them
+    let bestWindowStart = null;
+
     if (hourly?.time) {
       const dayStr = t;
-      const hourScores = [];
+      hourScores = [];
       
       hourly.time.forEach((ht, hi) => {
         if (!ht.startsWith(dayStr)) return;
@@ -7630,15 +7689,16 @@ function renderWeekForecast(daily) {
         
         // Precipitation
         if ([95,96,99].includes(codeH))     hs -= 50;
+        else if ([56,57,66,67].includes(codeH)) hs -= 50; // freezing rain/ice
         else if ([65,82].includes(codeH))   hs -= 35;
         else if ([63,81].includes(codeH))   hs -= 25;
         else if ([55].includes(codeH))      hs -= 18;
         else if ([51,53,61,80].includes(codeH)) hs -= 12;
         else if ([71,73,75].includes(codeH)) hs -= 45;
         else if ([45,48].includes(codeH))   hs -= 12;
-        
+
         // Rain probability (if not raining)
-        if (![51,53,55,61,63,65,80,81,82,95,96,99,71,73,75].includes(codeH)) {
+        if (![51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99,71,73,75].includes(codeH)) {
           if (pop > 70)                     hs -= 22;
           else if (pop > 50)                hs -= 15;
           else if (pop > 30)                hs -= 8;
@@ -7658,7 +7718,7 @@ function renderWeekForecast(daily) {
       
       // Find best 3-hour window and its position
       let bestWindowScore = 0;
-      let bestWindowStart = 0;
+      bestWindowStart = 0; // assign the hoisted outer var
       if (hourScores.length >= 3) {
         for (let i = 0; i <= hourScores.length - 3; i++) {
           const avg = (hourScores[i] + hourScores[i+1] + hourScores[i+2]) / 3;
@@ -7713,8 +7773,8 @@ function renderWeekForecast(daily) {
     score = Math.max(0, Math.min(100, score));
     
     // Store timing info for verdict labels
-    const windowHour = typeof bestWindowStart !== 'undefined' ? 5 + bestWindowStart : null;
-    const allDayGood = typeof hourScores !== 'undefined' && hourScores.length > 0 && Math.min(...hourScores) >= 50;
+    const windowHour = bestWindowStart != null ? 5 + bestWindowStart : null;
+    const allDayGood = hourScores != null && hourScores.length > 0 && Math.min(...hourScores) >= 50;
     const timingHint = allDayGood ? 'all-day' 
       : windowHour !== null && windowHour < 11 ? 'morning'
       : windowHour !== null && windowHour >= 16 ? 'evening'  
@@ -7796,7 +7856,7 @@ function renderFoodTab() {
 
     if (isShort) {
       smartTitle = '\u{1F3C1} Quick ' + rideDistDisplay + ' ride \u2014 light refuel';
-      smartPicks = ['Banana','Greek yogurt','Water','Berries','Apple','Dark chocolate'];
+      smartPicks = ['Banana','Greek yogurt','Water','Berries','Dates','Dark chocolate'];
     } else if (isLong) {
       smartTitle = '\u{1F3C1} ' + rideDistDisplay + ' done! Recovery is critical';
       smartPicks = ['Chocolate milk','Protein smoothie','Rice bowl','Pasta','Chicken breast','Sweet potato'];
@@ -7816,11 +7876,11 @@ function renderFoodTab() {
     appState._recoveryPlan = recoveryPlan;
   } else if (hour < 9) {
     smartTitle = '\u{2600}\uFE0F Morning ride? Fuel up';
-    smartPicks = ['Oatmeal','Banana','Toast','Coffee','Eggs','Yogurt'];
-    if (isHot) smartPicks = ['Banana','Smoothie','Coffee','Yogurt','Watermelon','Water'];
+    smartPicks = ['Oatmeal','Banana','Peanut butter toast','Coffee','Eggs','Greek yogurt'];
+    if (isHot) smartPicks = ['Banana','Smoothie','Coffee','Greek yogurt','Watermelon','Water'];
   } else if (hour < 12) {
     smartTitle = '\u{1F6B4} Heading out? Quick fuel';
-    smartPicks = ['Banana','Energy bar','Fig bar','Coffee','Dates','Toast'];
+    smartPicks = ['Banana','Energy bar','Fig bar','Coffee','Dates','Peanut butter toast'];
     if (isHot) smartPicks = ['Banana','Watermelon','Coconut water','Energy gel','Electrolyte tablets','Water'];
   } else if (hour < 15) {
     smartTitle = '\u{1F34C} Afternoon ride picks';
@@ -7855,7 +7915,7 @@ function renderFoodTab() {
     { id:'pre',    label:'\u{1F550} Pre-ride',  filter: f => f.when.includes('pre') },
     { id:'during', label:'\u{1F6B4} During',     filter: f => f.when.includes('during') },
     { id:'post',   label:'\u{1F3C1} Recovery',   filter: f => f.when.includes('post') },
-    { id:'snacks', label:'\u{1F34C} Snacks',     filter: f => ['Banana','Apple','Trail mix','Dates','Granola','Fig bar','Energy bar','Peanut butter','Gummy bears','Chocolate chip cookie','Jerky','Stroopwafel','Clif Bloks','Protein bar','Pickles','Yogurt','Toast','Bagel'].includes(f.name) },
+    { id:'snacks', label:'\u{1F34C} Snacks',     filter: f => ['Banana','Nuts','Trail mix','Dates','Granola','Fig bar','Energy bar','Peanut butter','Gummy bears','Chocolate chip cookie','Jerky','Stroopwafel','Clif Bloks','Protein bar','Pickles','Greek yogurt','Peanut butter toast','Bagel'].includes(f.name) },
     { id:'avoid',  label:'\u26A0\uFE0F Avoid',  filter: f => f.when === 'avoid' },
   ];
 
