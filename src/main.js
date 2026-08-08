@@ -2415,7 +2415,7 @@ function renderLogEntries() {
     const meta = [dist, dur, temp].filter(Boolean).join(' · ');
 
     return `<div class="log-entry">
-      <div class="log-entry-icon">${e.weatherIcon}</div>
+      <div class="log-entry-icon">${e.weatherIcon || '🚲'}</div>
       <div class="log-entry-main" data-editid="${e.id}" style="cursor:pointer">
         <div class="log-entry-date">${escHtml(dateStr)} <span style="font-weight:400;color:var(--text-muted)">${timeStr}</span></div>
         ${meta ? `<div class="log-entry-meta">${escHtml(meta)}</div>` : ''}
@@ -2531,10 +2531,16 @@ function renderLogInsights() {
   if (maxMi > 0) {
     const bars = ins.weeks.map(w => {
       // Pixel height (not %) so it doesn't depend on a definite-height flex parent.
-      const barPx = w.mi > 0 ? Math.max(4, Math.round((w.mi / maxMi) * TRACK)) : 2;
+      const barPx = w.mi > 0 ? Math.max(4, Math.round((w.mi / maxMi) * TRACK)) : 0;
       const tip = `${w.label}: ${num(conv(w.mi))} ${uLabel}`;
-      return `<div title="${escHtml(tip)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:0;">
-        <div style="width:100%;max-width:22px;height:${barPx}px;background:${HUE};opacity:${w.isCurrent ? 1 : 0.5};border-radius:4px 4px 0 0;"></div>
+      // A faint full-height "slot" behind every week so empty weeks read as intentional
+      // zeros (a real 8-week chart) rather than a broken/blank strip.
+      const valBar = w.mi > 0
+        ? `<div style="position:relative;width:100%;max-width:22px;height:${barPx}px;background:${HUE};opacity:${w.isCurrent ? 1 : 0.6};border-radius:4px 4px 0 0;"></div>`
+        : '';
+      return `<div title="${escHtml(tip)}" style="flex:1;position:relative;height:${TRACK}px;display:flex;justify-content:center;align-items:flex-end;min-width:0;">
+        <div style="position:absolute;bottom:0;width:100%;max-width:22px;height:100%;background:var(--border);opacity:0.4;border-radius:4px;"></div>
+        ${valBar}
       </div>`;
     }).join('');
     const first = ins.weeks[0].label, last = ins.weeks[ins.weeks.length - 1].label;
