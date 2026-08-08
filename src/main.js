@@ -10,6 +10,7 @@ import { buildFuelingPlan, buildNutritionPlan } from './lib/fueling.js';
 import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
+import { computeInsights } from './lib/insights.js';
 
 // Thin wrappers: read the global appState and delegate to the pure cores above.
 function toDisplay(tempF) { return _toDisplay(tempF, appState.tempUnit); }
@@ -2425,7 +2426,76 @@ function updateLogSubtitle() {
   renderLogStats();
 }
 
+function renderLogInsights() {
+  const el = $('logInsights');
+  if (!el) return;
+  const log = getRideLog();
+  const ins = computeInsights(log);
+  if (!ins.totalRides) { el.setAttribute('style', 'display:none'); return; }
+
+  const km = appState.unit === 'km';
+  const conv = mi => km ? mi * 1.60934 : mi;
+  const uLabel = km ? 'km' : 'mi';
+  const num = n => Math.round(n).toLocaleString();
+
+  // ── Stat tiles (magnitude headlines — not a chart) ──
+  const tiles = [
+    { v: num(ins.totalRides), l: 'rides' },
+    { v: num(conv(ins.totalMi)), l: `${uLabel} total` },
+    { v: num(conv(ins.avgMi)), l: `${uLabel} avg` },
+    { v: num(conv(ins.longestMi)), l: `${uLabel} longest` },
+  ].map(t =>
+    `<div style="flex:1;min-width:64px;text-align:center;">
+      <div style="font-family:'Space Grotesk',monospace;font-size:1.4rem;font-weight:700;color:var(--text);line-height:1.1;">${t.v}</div>
+      <div style="font-size:0.68rem;color:var(--text-faint);margin-top:2px;">${t.l}</div>
+    </div>`
+  ).join('');
+
+  // ── Weekly distance — single-hue sequential bars, baseline-anchored, current week emphasized ──
+  const HUE = '#5AA0E0';
+  const maxMi = Math.max(...ins.weeks.map(w => w.mi), 0);
+  let chart = '';
+  if (maxMi > 0) {
+    const bars = ins.weeks.map(w => {
+      const pct = Math.round((w.mi / maxMi) * 100);
+      const h = w.mi > 0 ? Math.max(6, pct) : 2;
+      const tip = `${w.label}: ${num(conv(w.mi))} ${uLabel}`;
+      return `<div title="${escHtml(tip)}" style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;min-width:0;">
+        <div style="width:100%;max-width:22px;height:${h}%;background:${HUE};opacity:${w.isCurrent ? 1 : 0.5};border-radius:4px 4px 0 0;"></div>
+      </div>`;
+    }).join('');
+    const first = ins.weeks[0].label, last = ins.weeks[ins.weeks.length - 1].label;
+    chart = `<div style="margin-top:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <span style="font-size:0.72rem;font-weight:600;color:var(--text-muted);">Weekly distance</span>
+        <span style="font-size:0.66rem;color:var(--text-faint);">last 8 weeks</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:64px;">${bars}</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--text-faint);margin-top:4px;">
+        <span>${escHtml(first)}</span><span>${escHtml(last)}</span>
+      </div>
+    </div>`;
+  }
+
+  // ── Rides by feel (compact summary line) ──
+  const feelIcons = { great: '😄', good: '👍', tough: '😤', bad: '😞' };
+  const feelParts = Object.entries(ins.byFeel).filter(([, c]) => c > 0)
+    .map(([k, c]) => `${feelIcons[k]} ${c}`).join('  ·  ');
+  const feel = feelParts
+    ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:0.8rem;color:var(--text-muted);">${feelParts}</div>`
+    : '';
+
+  el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:12px;');
+  el.innerHTML = `
+    <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:10px;">Insights</div>
+    <div style="display:flex;gap:8px;">${tiles}</div>
+    ${chart}
+    ${feel}
+  `;
+}
+
 function renderLogStats() {
+  renderLogInsights();
   let el = $('logStats');
   if (!el) {
     el = document.createElement('div');
