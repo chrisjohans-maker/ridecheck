@@ -4390,7 +4390,7 @@ function renderFoodTab() {
   const alreadyWired = catEl._wired;
 
   // ── SMART PICKS based on context ──
-  const hour = new Date().getHours();
+  const hour = locationNow().hour; // location wall-clock, not the device's
   const fl = appState.weather?.current?.apparent_temperature ?? appState.weather?.current?.temperature_2m ?? 70;
   const isHot = fl >= 85;
   const isCold = fl < 45;
@@ -4410,8 +4410,6 @@ function renderFoodTab() {
     const rideFeel = lastRide.feel || 'good';
     const rideDistDisplay = rideUnit === 'km' ? Math.round(rideDist * 1.60934) + ' km' : rideDist + ' mi';
 
-    // Estimate calorie needs based on distance
-    const estCals = Math.round(rideDist * 45); // ~45 cal/mile cycling
     const isLong = rideDist >= 30;
     const isShort = rideDist < 10;
 
