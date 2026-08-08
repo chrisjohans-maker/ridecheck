@@ -8,6 +8,7 @@ import { FOOD_DB, matchFood } from './lib/food.js';
 import { estimateDuration as _estimateDuration, getDurationBucket } from './lib/duration.js';
 import { buildFuelingPlan, buildNutritionPlan } from './lib/fueling.js';
 import { weatherPenalty } from './lib/scoring.js';
+import { summarizeNowcast } from './lib/nowcast.js';
 
 // Thin wrappers: read the global appState and delegate to the pure cores above.
 function toDisplay(tempF) { return _toDisplay(tempF, appState.tempUnit); }
@@ -890,6 +891,37 @@ function renderBestWindow(hourly) {
 }
 
 // ─── RENDER ALL ───────────────────────────────────────────────
+function renderNowcast(minutely15) {
+  const el = $('precipNowcast');
+  if (!el) return;
+  const s = summarizeNowcast(minutely15, locationNow().wall.getTime());
+  if (!s.hasData) { el.setAttribute('style', 'display:none'); return; }
+
+  const icon = s.state === 'dry' ? '🚴' : s.state === 'stopping' ? '🌦️' : '🌧️';
+
+  let bar = '';
+  if (s.peakMm > 0) {
+    const bars = s.series.map(b => {
+      const h = Math.max(6, Math.round((b.mm / s.peakMm) * 100));
+      const op = b.mm >= 0.1 ? 1 : 0.22;
+      return `<div style="flex:1;min-width:3px;height:${h}%;background:#5AA0E0;opacity:${op};border-radius:2px 2px 0 0;"></div>`;
+    }).join('');
+    bar = `<div style="margin-top:10px;">
+      <div style="display:flex;align-items:flex-end;gap:3px;height:30px;">${bars}</div>
+      <div style="font-size:0.68rem;color:var(--text-faint);margin-top:4px;">next 2 hrs</div>
+    </div>`;
+  }
+
+  el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 18px;margin-bottom:10px;');
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:1.2rem;line-height:1;">${icon}</span>
+      <span style="font-family:'Space Grotesk',monospace;font-size:0.95rem;font-weight:600;color:var(--text);">${escHtml(s.text)}</span>
+    </div>
+    ${bar}
+  `;
+}
+
 function renderAll() {
   const { weather, airQuality } = appState;
   if (!weather?.current) return;
@@ -903,6 +935,7 @@ function renderAll() {
       renderGlanceable(current, weather.hourly, score);
       return { score, factors };
     },
+    () => renderNowcast(weather.minutely_15),
     (ctx) => renderQuickStats(current, weather.daily),
     () => renderSunRow(weather.daily),
     () => renderAirQuality(airQuality),
@@ -1045,6 +1078,7 @@ async function fetchWeather(lat, lon) {
     `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,precipitation,uv_index` +
     `&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,wind_speed_10m,wind_direction_10m,relative_humidity_2m,uv_index` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,wind_speed_10m_max,sunrise,sunset,uv_index_max,relative_humidity_2m_max` +
+    `&minutely_15=precipitation&forecast_minutely_15=8` + // next 2 hrs (HRRR in N. America) for the next-hour nowcast
     `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=8${modelParam}`;
   const res = await fetchWithTimeout(url, {}, 8000);
   if (!res.ok) throw new Error('Open-Meteo forecast HTTP ' + res.status);
