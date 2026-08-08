@@ -4207,9 +4207,8 @@ async function fetchAirQuality(lat, lon) {
   const isUS = lat >= 24 && lat <= 50 && lon >= -125 && lon <= -66;
   if (isUS) {
     try {
-      const anUrl = 'https://www.airnowapi.org/aq/observation/latLong/current/?format=application/json' +
-        '&latitude=' + lat.toFixed(4) + '&longitude=' + lon.toFixed(4) +
-        '&distance=50&API_KEY=E9FB473C-01CB-4AEC-A21C-7A709561810D';
+      // Proxied through a Netlify function so the AirNow API key stays server-side.
+      const anUrl = '/.netlify/functions/airnow?lat=' + lat.toFixed(4) + '&lon=' + lon.toFixed(4);
       const res = await fetchWithTimeout(anUrl, {}, 8000);
       if (res.ok) {
         const data = await res.json();
