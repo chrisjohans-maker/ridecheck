@@ -11,6 +11,37 @@ import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
 import { computeInsights } from './lib/insights.js';
+import { updateAvailable } from './lib/version.js';
+
+// Build id baked in at build time (Vite `define`); 'dev' in un-built contexts.
+const RUNNING_BUILD = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
+let _updateShown = false;
+let _lastUpdateCheck = 0;
+
+// Detect a new deploy so users don't sit on a stale bundle (see version.json).
+async function checkForUpdate() {
+  const now = Date.now();
+  if (now - _lastUpdateCheck < 30000) return; // throttle to every 30s
+  _lastUpdateCheck = now;
+  try {
+    const res = await fetchWithTimeout('/version.json?_=' + now, {}, 5000);
+    if (!res.ok) return;
+    const { build } = await res.json();
+    if (updateAvailable(RUNNING_BUILD, build)) showUpdateBanner();
+  } catch (e) { /* offline or missing — ignore */ }
+}
+
+function showUpdateBanner() {
+  if (_updateShown) return;
+  _updateShown = true;
+  const b = document.createElement('button');
+  b.id = 'updateBanner';
+  b.textContent = '🔄 Update available — tap to refresh';
+  b.setAttribute('style', 'position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 70px);transform:translateX(-50%);z-index:9999;background:var(--green);color:#fff;border:none;border-radius:999px;padding:10px 18px;font-family:inherit;font-size:0.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.3);cursor:pointer;-webkit-appearance:none;');
+  b.addEventListener('click', () => location.reload());
+  document.body.appendChild(b);
+}
+
 
 // Thin wrappers: read the global appState and delegate to the pure cores above.
 function toDisplay(tempF) { return _toDisplay(tempF, appState.tempUnit); }
@@ -4034,6 +4065,12 @@ function setupStrava() {
 
 // ─── BOOT ─────────────────────────────────────────────────────
 init();
+
+// Check for a newer deploy shortly after load and whenever the app regains focus.
+setTimeout(checkForUpdate, 4000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkForUpdate();
+});
 
 // ─── CONFIDENCE ───────────────────────────────────────────────
 function calcConfidence(current, hourly, daily) {
