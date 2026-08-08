@@ -1678,6 +1678,37 @@ function buildGearList(current, hourly, rideType, duration, bikeType) {
 
 // ── HYDRATION & FUELING (during ride) ────────────────────────
 
+// Build a horizontal row of tappable scored-food chips (by FOOD_DB name).
+function foodPickChipsHtml(names) {
+  return names.map(name => {
+    const f = FOOD_DB.find(fd => fd.name === name);
+    if (!f) return '';
+    const color = f.score >= 75 ? 'var(--green)' : f.score >= 50 ? '#E9A01A' : '#C1121F';
+    const macro = f.carbs != null ? ` · ${f.carbs}g` : '';
+    return '<button class="food-pick-chip" data-food="' + escHtml(f.name) + '" style="flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;-webkit-appearance:none;font-family:inherit">' +
+      '<span style="font-family:var(--font-data);font-weight:700;font-size:0.85rem;color:' + color + '">' + f.score + '</span>' +
+      '<span style="font-size:0.82rem;font-weight:600;color:var(--text)">' + escHtml(f.name) + macro + '</span></button>';
+  }).join('');
+}
+
+// Wire food-pick chips in `container` to open the tapped food's card on the Food tab.
+function wireFoodPickChips(container) {
+  container?.querySelectorAll('.food-pick-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const food = FOOD_DB.find(f => f.name === btn.dataset.food);
+      if (!food) return;
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => { p.classList.remove('active'); p.scrollTop = 0; });
+      document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active');
+      $('tabFood')?.classList.add('active');
+      renderFoodTab();
+      const resultEl = $('foodTabResult');
+      renderFoodResult(food, resultEl);
+      setTimeout(() => resultEl?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    });
+  });
+}
+
 function renderFueling() {
   const el = $('fuelingResult');
   if (!el) return;
@@ -1729,8 +1760,13 @@ function renderFueling() {
         </div>
       `).join('')}
     </div>
+    <div style="margin-top:14px;">
+      <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:8px;">🍫 On-bike fuel — tap for the scored breakdown</div>
+      <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px;">${foodPickChipsHtml(['Energy gel', 'Energy bar', 'Banana', 'Dates', 'Clif Bloks', 'Stroopwafel'])}</div>
+    </div>
     <p class="fueling-note">${appState.bikeType === 'ebike' ? '⚡ E-bike: estimates reduced ~50% for assisted effort. ' : ''}Based on ${distLabel} ${appState.rideType} ride at ${toDisplay(current.apparent_temperature)}${unitLabel()}${appState.elevationM && appState.elevationM > 800 ? ` · ${Math.round(appState.elevationM)}m elevation` : ""}. Assumes ${Math.round(appState.weightKg)}kg rider.</p>
   `;
+  wireFoodPickChips(el);
 }
 
 // ── POST-RIDE NUTRITION ───────────────────────────────────────
@@ -1787,8 +1823,13 @@ function renderNutrition() {
         </div>`).join('')}
     </div>
 
+    <div style="margin-top:14px;">
+      <div style="font-size:0.72rem;font-weight:600;color:var(--text-muted);margin-bottom:8px;">🏁 Recovery picks — tap for the scored breakdown</div>
+      <div style="display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px;">${foodPickChipsHtml(['Chocolate milk', 'Rice bowl', 'Chicken breast', 'Greek yogurt', 'Sweet potato', 'Berries'])}</div>
+    </div>
     <p class="nutrition-note">Based on ${plan.durationMins < 60 ? plan.durationMins+'min' : Math.round(plan.durationMins/60*10)/10+'hr'} ${appState.rideType} ride at ${toDisplay(current.apparent_temperature)}${unitLabel()}${appState.elevationM && appState.elevationM > 800 ? ` · ${Math.round(appState.elevationM)}m elevation` : ''}. Assumes ${Math.round(appState.weightKg)}kg rider.</p>
   `;
+  wireFoodPickChips(el);
 }
 
 // ─── LOADING ──────────────────────────────────────────────────
