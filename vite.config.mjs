@@ -7,4 +7,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  test: {
+    // Pure logic only — no DOM needed.
+    environment: 'node',
+    include: ['tests/**/*.test.js'],
+  },
 });
