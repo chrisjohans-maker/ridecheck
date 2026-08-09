@@ -2915,17 +2915,36 @@ function closeSettings() {
   }
 }
 
-function exportLogJSON() {
+// Save a generated file. iOS Safari/PWAs ignore programmatic <a download>, so use
+// the native share sheet ("Save to Files"/AirDrop) when files can be shared, and
+// fall back to a download link on desktop. Must be called from a user gesture.
+async function downloadOrShare(filename, text, mime) {
+  try {
+    const file = new File([text], filename, { type: mime });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+      return 'shared';
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return 'cancelled'; // user dismissed the sheet
+    // any other error → fall through to the download path
+  }
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  return 'downloaded';
+}
+
+async function exportLogJSON() {
   const log = getRideLog();
   if (!log.length) { showToast('No rides to back up'); return; }
   const payload = JSON.stringify({ app: 'ridecheck', type: 'ridelog', version: 1, exportedAt: new Date().toISOString(), rides: log }, null, 2);
-  const blob = new Blob([payload], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'ridecheck-backup.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Backup downloaded — keep it safe');
+  const how = await downloadOrShare('ridecheck-backup.json', payload, 'application/json');
+  if (how === 'cancelled') return;
+  showToast(how === 'shared' ? 'Backup ready — choose Save to Files' : 'Backup downloaded — keep it safe');
 }
 
 function importLogFile(file) {
@@ -2944,7 +2963,7 @@ function importLogFile(file) {
   reader.readAsText(file);
 }
 
-function exportLogCSV() {
+async function exportLogCSV() {
   const log = getRideLog();
   if (!log.length) { showToast('No rides to export'); return; }
   const rows = log.map(e => [
@@ -2960,13 +2979,9 @@ function exportLogCSV() {
     e.notes || '',
   ]);
   const csv = [headers, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'ridecheck-log.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Log exported as CSV');
+  const how = await downloadOrShare('ridecheck-log.csv', csv, 'text/csv');
+  if (how === 'cancelled') return;
+  showToast(how === 'shared' ? 'CSV ready — choose Save to Files' : 'Log exported as CSV');
 }
 
 // ─── WEIGHT INTERSTITIAL ─────────────────────────────────────
