@@ -29,4 +29,11 @@ describe('weatherSvg / uiIcon', () => {
     expect(uiIcon('droplet')).toMatch(/^<svg/);
     expect(uiIcon('nope')).toBe('');
   });
+  it('is decorative (aria-hidden) without a label, announced (role=img) with one', () => {
+    expect(weatherSvg(63, 20)).toContain('aria-hidden="true"');
+    const labeled = weatherSvg(63, 20, 'Rain');
+    expect(labeled).toContain('role="img"');
+    expect(labeled).toContain('aria-label="Rain"');
+    expect(labeled).not.toContain('aria-hidden');
+  });
 });

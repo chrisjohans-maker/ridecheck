@@ -2400,7 +2400,7 @@ input, select, textarea { font-size: 16px !important; }
       <form id="searchForm" autocomplete="off" class="search-form">
         <div class="search-input-wrap">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          <input type="text" id="postalInput" placeholder="City or postal code" maxlength="60" required autocomplete="off" />
+          <input type="text" id="postalInput" aria-label="City or postal code" placeholder="City or postal code" maxlength="60" required autocomplete="off" />
           <button type="button" class="search-clear hidden" id="searchClear" aria-label="Clear">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
@@ -2523,7 +2523,7 @@ input, select, textarea { font-size: 16px !important; }
             <div class="gear-input-group">
               <p class="gear-options-label">Distance</p>
               <div class="distance-input-wrap">
-                <input type="number" id="distanceInput" placeholder="e.g. 40" min="1" max="999" inputmode="numeric" />
+                <input type="number" id="distanceInput" aria-label="Ride distance" placeholder="e.g. 40" min="1" max="999" inputmode="numeric" />
                 <div class="unit-toggle">
                   <button class="unit-btn active" data-unit="mi">mi</button>
                   <button class="unit-btn" data-unit="km">km</button>
@@ -2577,7 +2577,7 @@ input, select, textarea { font-size: 16px !important; }
       <!-- ── TAB: LOG ── -->
       <div class="tab-pane" id="tabFood">
         <div style="padding:16px">
-          <input type="text" id="foodTabSearch" placeholder="🔍 Search any food — pizza, oatmeal, beer…" autocomplete="off" inputmode="search"
+          <input type="text" id="foodTabSearch" aria-label="Search foods" placeholder="🔍 Search any food — pizza, oatmeal, beer…" autocomplete="off" inputmode="search"
             style="width:100%;padding:12px 14px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;font-family:inherit;font-size:16px;color:var(--text);-webkit-appearance:none;box-sizing:border-box;" />
           <div id="foodTabSearchResult" style="margin-bottom:12px"></div>
           <div id="foodTabCategories"></div>
@@ -2635,24 +2635,24 @@ input, select, textarea { font-size: 16px !important; }
 
     <!-- BOTTOM NAV -->
     <nav class="bottom-nav" id="bottomNav">
-      <button class="nav-item active" data-tab="tabHome">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10.707 2.293a1 1 0 0 0-1.414 0l-7 7a1 1 0 0 0 1.414 1.414L4 10.414V17a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-6.586l.293.293a1 1 0 0 0 1.414-1.414l-7-7ZM14 18h-4v-5h4v5Z"/></svg>
+      <button class="nav-item active" data-tab="tabHome" aria-current="page">
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M10.707 2.293a1 1 0 0 0-1.414 0l-7 7a1 1 0 0 0 1.414 1.414L4 10.414V17a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-6.586l.293.293a1 1 0 0 0 1.414-1.414l-7-7ZM14 18h-4v-5h4v5Z"/></svg>
         <span>Today</span>
       </button>
       <button class="nav-item" data-tab="tabForecast">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm4.22 1.78a1 1 0 0 1 1.415 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707ZM7.78 3.78a1 1 0 0 1 0 1.414l-.707.707A1 1 0 0 1 5.66 4.487l.707-.707a1 1 0 0 1 1.414 0ZM12 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 5a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1ZM5 11a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2h1Zm14.07 5.07a1 1 0 0 1 0 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0ZM6.343 16.343a1 1 0 0 1 0 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0ZM12 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1Z"/></svg>
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm4.22 1.78a1 1 0 0 1 1.415 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707ZM7.78 3.78a1 1 0 0 1 0 1.414l-.707.707A1 1 0 0 1 5.66 4.487l.707-.707a1 1 0 0 1 1.414 0ZM12 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 5a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1ZM5 11a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2h1Zm14.07 5.07a1 1 0 0 1 0 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0ZM6.343 16.343a1 1 0 0 1 0 1.414l-.707.707a1 1 0 0 1-1.414-1.414l.707-.707a1 1 0 0 1 1.414 0ZM12 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1Z"/></svg>
         <span>Forecast</span>
       </button>
       <button class="nav-item" data-tab="tabGear">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M16 2H8L2 8l2 2 2-2v14h12V8l2 2 2-2-6-6Zm-4 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M16 2H8L2 8l2 2 2-2v14h12V8l2 2 2-2-6-6Zm-4 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>
         <span>Prep</span>
       </button>
       <button class="nav-item" data-tab="tabFood">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.1 9 3.9V22l5.5-1.9V2.1ZM3.5 4 2 4.5V20l1.5-.5 5-1.7V2.3L3.5 4Zm17 0L15.5 2.1V20.1L22 22V5.5l-1.5-1.5Z"/></svg>
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 2.1 9 3.9V22l5.5-1.9V2.1ZM3.5 4 2 4.5V20l1.5-.5 5-1.7V2.3L3.5 4Zm17 0L15.5 2.1V20.1L22 22V5.5l-1.5-1.5Z"/></svg>
         <span>Food</span>
       </button>
       <button class="nav-item" data-tab="tabLog">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm-2 13H7v-2h3v2Zm0-4H7v-2h3v2Zm5 4h-3v-2h3v2Zm0-4h-3v-2h3v2Zm1-6H8V8h8v2Z"/></svg>
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm-2 13H7v-2h3v2Zm0-4H7v-2h3v2Zm5 4h-3v-2h3v2Zm0-4h-3v-2h3v2Zm1-6H8V8h8v2Z"/></svg>
         <span>Log</span>
       </button>
     </nav>
@@ -2702,7 +2702,7 @@ input, select, textarea { font-size: 16px !important; }
                 <div class="log-edit-row">
                   <label class="log-label">Distance</label>
                   <div class="distance-input-wrap">
-                    <input type="number" id="logDistance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1" />
+                    <input type="number" id="logDistance" aria-label="Distance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1" />
                     <div class="unit-toggle">
                       <button class="unit-btn active" data-logunit="mi">mi</button>
                       <button class="unit-btn" data-logunit="km">km</button>
@@ -2712,7 +2712,7 @@ input, select, textarea { font-size: 16px !important; }
                 <div class="log-edit-row">
                   <label class="log-label">Duration</label>
                   <div class="distance-input-wrap">
-                    <input type="number" id="logDuration" placeholder="e.g. 90" min="1" max="999" inputmode="numeric" />
+                    <input type="number" id="logDuration" aria-label="Duration in minutes" placeholder="e.g. 90" min="1" max="999" inputmode="numeric" />
                     <div class="unit-toggle" style="border-left:1.5px solid var(--border)">
                       <span class="unit-label">min</span>
                     </div>
@@ -2720,7 +2720,7 @@ input, select, textarea { font-size: 16px !important; }
                 </div>
                 <div class="log-edit-row">
                   <label class="log-label">Bike</label>
-                  <input type="text" id="logBike" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input" />
+                  <input type="text" id="logBike" aria-label="Bike name" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input" />
                 </div>
                 <div class="log-edit-row">
                   <label class="log-label">Notes</label>
@@ -2881,7 +2881,7 @@ input, select, textarea { font-size: 16px !important; }
         <div class="log-edit-row">
           <label class="log-label">Distance</label>
           <div class="distance-input-wrap">
-            <input type="number" id="editDistance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1"/>
+            <input type="number" id="editDistance" aria-label="Distance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1"/>
             <div class="unit-toggle">
               <button class="unit-btn active" data-editunit="mi">mi</button>
               <button class="unit-btn" data-editunit="km">km</button>
@@ -2891,7 +2891,7 @@ input, select, textarea { font-size: 16px !important; }
         <div class="log-edit-row" style="margin-top:10px">
           <label class="log-label">Duration</label>
           <div class="distance-input-wrap">
-            <input type="number" id="editDuration" placeholder="e.g. 90" min="1" max="999" inputmode="numeric"/>
+            <input type="number" id="editDuration" aria-label="Duration in minutes" placeholder="e.g. 90" min="1" max="999" inputmode="numeric"/>
             <div class="unit-toggle" style="border-left:1.5px solid var(--border)">
               <span class="unit-label">min</span>
             </div>
@@ -2908,7 +2908,7 @@ input, select, textarea { font-size: 16px !important; }
         </div>
         <div class="log-edit-row" style="margin-top:10px">
           <label class="log-label">Bike</label>
-          <input type="text" id="editBike" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input"/>
+          <input type="text" id="editBike" aria-label="Bike name" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input"/>
         </div>
         <div class="log-edit-row" style="margin-top:10px">
           <label class="log-label">Notes</label>
@@ -3048,7 +3048,7 @@ input, select, textarea { font-size: 16px !important; }
         <h3>Your weight</h3>
         <p>Used for hydration and fueling estimates. You can change this anytime in Settings.</p>
         <div style="display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center">
-          <input type="number" id="onboardWeight" placeholder="160" style="width:80px;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:var(--font-data);font-size:16px;font-weight:700;color:var(--text);text-align:center;-webkit-appearance:none;" />
+          <input type="number" id="onboardWeight" aria-label="Your weight" placeholder="160" style="width:80px;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;font-family:var(--font-data);font-size:16px;font-weight:700;color:var(--text);text-align:center;-webkit-appearance:none;" />
           <button class="unit-btn active" data-owunit="lb" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--green);color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;-webkit-appearance:none;">lb</button>
           <button class="unit-btn" data-owunit="kg" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:0.82rem;font-weight:600;cursor:pointer;-webkit-appearance:none;">kg</button>
         </div>
