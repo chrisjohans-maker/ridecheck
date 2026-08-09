@@ -28,6 +28,9 @@ export function scoreFood(m = {}) {
   score += Math.min(10, fiberRatio * 30);     // whole-food bonus
   score -= Math.max(0, fatPct - 0.35) * 55;   // high fat = heavy / slow to digest
   score -= alcPct * 120;                       // alcohol = avoid
+  // Energy density matters for FUEL: nutrient-dense-but-low-calorie foods
+  // (leafy greens, etc.) are healthy but aren't real ride fuel — soft-cap them.
+  if (cal < 55) score = Math.min(score, 72);
   score = Math.round(Math.max(5, Math.min(98, score)));
 
   // Timing. "avoid" only for alcohol or high-fat-and-not-nutritious (fried junk);

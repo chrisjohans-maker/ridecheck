@@ -11,6 +11,7 @@ import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
 import { computeInsights } from './lib/insights.js';
+import { scoreFood } from './lib/food-score.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
 
@@ -3728,9 +3729,9 @@ function renderFoodResult(food, targetEl) {
     return '<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(45,106,79,0.1);color:' + (colors[t.trim()] || 'var(--text-muted)') + '">' + (icons[t.trim()] || '') + ' ' + (labels[t.trim()] || t) + '</span>';
   }).join(' ') + (food.preTiming ? ' <span style="display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(45,106,79,0.15);color:var(--green)">\u23F0 ' + food.preTiming + '</span>' : '')
 
-  // Nutrient tags
-  const nutrientTags = food.nutrients.split(',').map(n => 
-    `<span style="font-size:0.7rem;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--bg);color:var(--text-muted)">${n.trim()}</span>`
+  // Nutrient tags (curated foods only; estimated results have none)
+  const nutrientTags = (food.nutrients || '').split(',').map(n => n.trim()).filter(Boolean).map(n =>
+    `<span style="font-size:0.7rem;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--bg);color:var(--text-muted)">${escHtml(n)}</span>`
   ).join(' ');
   
   const verdict = food.score >= 80 ? 'Great choice' : food.score >= 65 ? 'Solid option' : food.score >= 45 ? 'Not ideal' : 'Skip this';
@@ -3757,7 +3758,9 @@ function renderFoodResult(food, targetEl) {
       <div style="margin:10px 0 8px;display:flex;gap:4px;flex-wrap:wrap">${timingPills}</div>
       ${macroRow}
       <div class="food-card-why" style="margin-top:10px">${escHtml(food.why)}</div>
-      <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">${nutrientTags}</div>
+      ${food.estimated
+        ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:0.68rem;color:var(--text-faint);">📊 Estimated from USDA nutrition data — not a hand-curated pick</div>`
+        : (nutrientTags ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">${nutrientTags}</div>` : '')}
     </div>
   `;
 }
@@ -4516,10 +4519,31 @@ function renderFoodTab() {
   const searchResultEl = $('foodTabSearchResult');
   if (searchEl && !searchEl._wired) {
     searchEl._wired = true;
+    let seq = 0, timer = null;
     searchEl.addEventListener('input', () => {
       const q = searchEl.value.trim();
+      clearTimeout(timer);
       if (!q) { if (searchResultEl) searchResultEl.innerHTML = ''; return; }
-      renderFoodResult(matchFood(q), searchResultEl); // null -> "Not in the database" card
+      // Curated hit shows instantly (best quality)…
+      const curated = matchFood(q);
+      if (curated) { renderFoodResult(curated, searchResultEl); return; }
+      // …otherwise fall back to USDA (debounced), scoring the macros ourselves.
+      const my = ++seq;
+      if (searchResultEl) searchResultEl.innerHTML = `<div style="padding:14px;color:var(--text-muted);font-size:0.85rem;">Searching “${escHtml(q)}”…</div>`;
+      timer = setTimeout(async () => {
+        try {
+          const res = await fetchWithTimeout('/.netlify/functions/usda?q=' + encodeURIComponent(q), {}, 8000);
+          if (my !== seq) return; // superseded by a newer keystroke
+          const data = res.ok ? await res.json() : null;
+          if (my !== seq) return;
+          if (!data || !data.found || data.macros?.cal == null) { renderFoodResult(null, searchResultEl); return; }
+          const est = scoreFood(data.macros);
+          renderFoodResult({
+            name: data.name, score: est.score, when: est.when, why: est.why, estimated: true,
+            serving: data.serving, cal: data.macros.cal, carbs: data.macros.carbs, protein: data.macros.protein,
+          }, searchResultEl);
+        } catch { if (my === seq) renderFoodResult(null, searchResultEl); }
+      }, 400);
     });
   }
   // Always recalculate smart picks (context changes with time/rides)
