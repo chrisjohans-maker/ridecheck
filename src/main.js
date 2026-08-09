@@ -11,7 +11,6 @@ import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
 import { computeInsights } from './lib/insights.js';
-import { scoreFood } from './lib/food-score.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
 
@@ -3706,6 +3705,23 @@ function renderMiniOutlook() {
 // ─── FOOD CHECKER ────────────────────────────────────────────
 
 
+// Shown when a search doesn't match a curated food — honest, no fabricated score.
+function renderNoFoodMatch(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+      <div style="font-size:1.4rem;margin-bottom:6px;">🤷</div>
+      <div style="font-weight:600;margin-bottom:4px;color:var(--text);">Not on our list</div>
+      <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;">We hand-pick foods scored for cycling — try the categories below, or this rule of thumb:</div>
+      <div style="margin-top:12px;font-size:0.8rem;color:var(--text-muted);line-height:1.85;">
+        <div><b style="color:var(--text);">3–4 hrs before</b> — full meal (pasta, rice, oatmeal)</div>
+        <div><b style="color:var(--text);">1–2 hrs</b> — light snack (toast, yogurt, banana)</div>
+        <div><b style="color:var(--text);">30–60 min</b> — quick carbs (banana, dates, gel)</div>
+        <div><b style="color:var(--text);">During</b> — 30–60g carbs/hr (gels, chews, bananas)</div>
+      </div>
+    </div>`;
+}
+
 function renderFoodResult(food, targetEl) {
   const el = targetEl || $('foodResult') || $('foodTabResult');
   if (!el) return;
@@ -3758,9 +3774,7 @@ function renderFoodResult(food, targetEl) {
       <div style="margin:10px 0 8px;display:flex;gap:4px;flex-wrap:wrap">${timingPills}</div>
       ${macroRow}
       <div class="food-card-why" style="margin-top:10px">${escHtml(food.why)}</div>
-      ${food.estimated
-        ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:0.68rem;color:var(--text-faint);">📊 Estimated from USDA nutrition data — not a hand-curated pick</div>`
-        : (nutrientTags ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">${nutrientTags}</div>` : '')}
+      ${nutrientTags ? `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap">${nutrientTags}</div>` : ''}
     </div>
   `;
 }
@@ -4519,31 +4533,12 @@ function renderFoodTab() {
   const searchResultEl = $('foodTabSearchResult');
   if (searchEl && !searchEl._wired) {
     searchEl._wired = true;
-    let seq = 0, timer = null;
     searchEl.addEventListener('input', () => {
       const q = searchEl.value.trim();
-      clearTimeout(timer);
       if (!q) { if (searchResultEl) searchResultEl.innerHTML = ''; return; }
-      // Curated hit shows instantly (best quality)…
       const curated = matchFood(q);
-      if (curated) { renderFoodResult(curated, searchResultEl); return; }
-      // …otherwise fall back to USDA (debounced), scoring the macros ourselves.
-      const my = ++seq;
-      if (searchResultEl) searchResultEl.innerHTML = `<div style="padding:14px;color:var(--text-muted);font-size:0.85rem;">Searching “${escHtml(q)}”…</div>`;
-      timer = setTimeout(async () => {
-        try {
-          const res = await fetchWithTimeout('/.netlify/functions/usda?q=' + encodeURIComponent(q), {}, 8000);
-          if (my !== seq) return; // superseded by a newer keystroke
-          const data = res.ok ? await res.json() : null;
-          if (my !== seq) return;
-          if (!data || !data.found || data.macros?.cal == null) { renderFoodResult(null, searchResultEl); return; }
-          const est = scoreFood(data.macros);
-          renderFoodResult({
-            name: data.name, score: est.score, when: est.when, why: est.why, estimated: true,
-            serving: data.serving, cal: data.macros.cal, carbs: data.macros.carbs, protein: data.macros.protein,
-          }, searchResultEl);
-        } catch { if (my === seq) renderFoodResult(null, searchResultEl); }
-      }, 400);
+      if (curated) renderFoodResult(curated, searchResultEl);
+      else renderNoFoodMatch(searchResultEl); // honest: not on our list + a timing rule of thumb
     });
   }
   // Always recalculate smart picks (context changes with time/rides)
