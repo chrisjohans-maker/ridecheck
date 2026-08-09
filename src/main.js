@@ -2862,13 +2862,23 @@ function setupSettings() {
     closeSettings();
   });
 
-  $('settingRestoreLog')?.addEventListener('click', () => {
-    $('importFileInput')?.click();
-  });
-  $('importFileInput')?.addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) importLogFile(file);
-    e.target.value = ''; // allow re-importing the same file
+  // Restore via a link or pasted JSON — iOS home-screen PWAs can't open a file
+  // picker, so we don't rely on <input type=file>. A URL is fetched; anything
+  // else is treated as pasted backup text.
+  $('settingRestoreLog')?.addEventListener('click', async () => {
+    const input = prompt('Paste a backup link (URL) or the backup text:');
+    if (input == null) return;
+    let text = input.trim();
+    if (!text) return;
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        const res = await fetchWithTimeout(text, {}, 8000);
+        if (!res.ok) { showToast('Could not open that link'); return; }
+        text = await res.text();
+      } catch { showToast('Could not open that link'); return; }
+    }
+    restoreFromText(text);
+    closeSettings();
   });
 
   $('settingClearLog')?.addEventListener('click', () => {
@@ -2947,20 +2957,15 @@ async function exportLogJSON() {
   showToast(how === 'shared' ? 'Backup ready — choose Save to Files' : 'Backup downloaded — keep it safe');
 }
 
-function importLogFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const res = parseBackup(String(reader.result));
-    if (!res.ok) { showToast('Import failed: ' + res.error); return; }
-    const { merged, added } = mergeRides(getRideLog(), res.rides);
-    saveRideLog(merged);
-    renderLogEntries();
-    updateLogSubtitle();
-    if (typeof renderLogStats === 'function') renderLogStats();
-    showToast(added ? `Restored ${added} ride${added !== 1 ? 's' : ''}` : 'No new rides (already in your log)');
-  };
-  reader.onerror = () => showToast('Could not read that file');
-  reader.readAsText(file);
+function restoreFromText(text) {
+  const res = parseBackup(text);
+  if (!res.ok) { showToast('Import failed: ' + res.error); return; }
+  const { merged, added } = mergeRides(getRideLog(), res.rides);
+  saveRideLog(merged);
+  renderLogEntries();
+  updateLogSubtitle();
+  if (typeof renderLogStats === 'function') renderLogStats();
+  showToast(added ? `Restored ${added} ride${added !== 1 ? 's' : ''}` : 'No new rides (already in your log)');
 }
 
 async function exportLogCSV() {
