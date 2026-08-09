@@ -44,6 +44,22 @@ describe('computeInsights', () => {
     expect(r.weeks[6].mi).toBe(30); // previous week
   });
 
+  it('buckets distance into the last 6 calendar months', () => {
+    const log = [
+      { date: daysAgo(0), distanceMi: 20 },   // this month
+      { date: daysAgo(2), distanceMi: 30 },   // this month
+      { date: '2026-07-15T09:00:00', distanceMi: 40 }, // last month (July)
+    ];
+    const r = computeInsights(log, now); // now = Aug 12 2026
+    expect(r.months).toHaveLength(6);
+    expect(r.months[5].isCurrent).toBe(true);
+    expect(r.months[5].label).toBe('Aug');
+    expect(r.months[5].mi).toBe(50);       // this month
+    expect(r.thisMonthMi).toBe(50);
+    expect(r.months[4].label).toBe('Jul');
+    expect(r.months[4].mi).toBe(40);       // last month
+  });
+
   it('counts rides by feel', () => {
     const log = [
       { date: daysAgo(1), feel: 'good' },

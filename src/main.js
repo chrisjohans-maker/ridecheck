@@ -2531,36 +2531,32 @@ function renderLogInsights() {
     </div>`
   ).join('');
 
-  // ── Weekly distance — single-hue sequential bars, baseline-anchored, current week emphasized ──
+  // ── Monthly distance — labeled bars (value on top, month below), current month emphasized ──
   const HUE = '#5AA0E0';
-  const TRACK = 64; // px height of the bar track
-  const maxMi = Math.max(...ins.weeks.map(w => w.mi), 0);
+  const TRACK = 56; // px height of the bar track
+  const maxMi = Math.max(...ins.months.map(m => m.mi), 0);
   let chart = '';
   if (maxMi > 0) {
-    const bars = ins.weeks.map(w => {
-      // Pixel height (not %) so it doesn't depend on a definite-height flex parent.
-      const barPx = w.mi > 0 ? Math.max(4, Math.round((w.mi / maxMi) * TRACK)) : 0;
-      const tip = `${w.label}: ${num(conv(w.mi))} ${uLabel}`;
-      // A faint full-height "slot" behind every week so empty weeks read as intentional
-      // zeros (a real 8-week chart) rather than a broken/blank strip.
-      const valBar = w.mi > 0
-        ? `<div style="position:relative;width:100%;max-width:22px;height:${barPx}px;background:${HUE};opacity:${w.isCurrent ? 1 : 0.6};border-radius:4px 4px 0 0;"></div>`
+    const bars = ins.months.map(m => {
+      const barPx = m.mi > 0 ? Math.max(4, Math.round((m.mi / maxMi) * TRACK)) : 0;
+      const valBar = m.mi > 0
+        ? `<div style="position:relative;width:100%;max-width:26px;height:${barPx}px;background:${HUE};opacity:${m.isCurrent ? 1 : 0.55};border-radius:4px 4px 0 0;"></div>`
         : '';
-      return `<div title="${escHtml(tip)}" style="flex:1;position:relative;height:${TRACK}px;display:flex;justify-content:center;align-items:flex-end;min-width:0;">
-        <div style="position:absolute;bottom:0;width:100%;max-width:22px;height:100%;background:var(--border);opacity:0.4;border-radius:4px;"></div>
-        ${valBar}
+      return `<div title="${escHtml(m.label + ': ' + num(conv(m.mi)) + ' ' + uLabel)}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;">
+        <div style="font-size:0.62rem;font-weight:600;color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};height:12px;">${m.mi > 0 ? num(conv(m.mi)) : ''}</div>
+        <div style="position:relative;width:100%;height:${TRACK}px;display:flex;justify-content:center;align-items:flex-end;">
+          <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:26px;height:${TRACK}px;background:var(--border);opacity:0.35;border-radius:4px;"></div>
+          ${valBar}
+        </div>
+        <div style="font-size:0.64rem;color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};font-weight:${m.isCurrent ? 700 : 400};">${escHtml(m.label)}</div>
       </div>`;
     }).join('');
-    const first = ins.weeks[0].label, last = ins.weeks[ins.weeks.length - 1].label;
     chart = `<div style="margin-top:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
-        <span style="font-size:0.72rem;font-weight:600;color:var(--text-muted);">Weekly distance</span>
-        <span style="font-size:0.66rem;color:var(--text-faint);">last 8 weeks</span>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+        <span style="font-size:0.72rem;font-weight:600;color:var(--text-muted);">Monthly distance</span>
+        <span style="font-size:0.66rem;color:var(--text-faint);">this month <span style="color:var(--text);font-weight:700;">${num(conv(ins.thisMonthMi))} ${uLabel}</span></span>
       </div>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:64px;">${bars}</div>
-      <div style="display:flex;justify-content:space-between;font-size:0.62rem;color:var(--text-faint);margin-top:4px;">
-        <span>${escHtml(first)}</span><span>${escHtml(last)}</span>
-      </div>
+      <div style="display:flex;align-items:flex-end;gap:6px;">${bars}</div>
     </div>`;
   }
 
