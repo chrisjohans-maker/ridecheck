@@ -38,6 +38,8 @@ function showUpdateBanner() {
   _updateShown = true;
   const b = document.createElement('button');
   b.id = 'updateBanner';
+  b.setAttribute('aria-label', 'Update available — tap to refresh');
+  b.setAttribute('role', 'status');
   b.textContent = '🔄 Update available — tap to refresh';
   b.setAttribute('style', 'position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 70px);transform:translateX(-50%);z-index:9999;background:var(--green);color:#fff;border:none;border-radius:999px;padding:10px 18px;font-family:inherit;font-size:0.85rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.3);cursor:pointer;-webkit-appearance:none;');
   b.addEventListener('click', () => location.reload());
@@ -375,12 +377,13 @@ function setupNavigation() {
     const item = e.target.closest('.nav-item');
     if (!item) return;
     const tabId = item.dataset.tab;
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
     document.querySelectorAll('.tab-pane').forEach(p => {
       p.classList.remove('active');
       p.scrollTop = 0; // reset scroll on every tab switch
     });
     item.classList.add('active');
+    item.setAttribute('aria-current', 'page');
     $(tabId).classList.add('active');
     if (tabId === 'tabFood') {
       renderFoodTab();
@@ -1052,9 +1055,9 @@ function switchToApp(geo) {
   $('screenSearch').classList.remove('active');
   $('screenApp').classList.add('active');
   // Reset to home tab
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelector('.nav-item[data-tab="tabHome"]').classList.add('active');
+  document.querySelector('.nav-item[data-tab="tabHome"]').classList.add('active'); document.querySelector('.nav-item[data-tab="tabHome"]').setAttribute('aria-current','page');
   $('tabHome').classList.add('active');
   // Reset gear result panel
   $('gearResult').classList.add('hidden');
@@ -1728,9 +1731,9 @@ function wireFoodPickChips(container) {
     btn.addEventListener('click', () => {
       const food = FOOD_DB.find(f => f.name === btn.dataset.food);
       if (!food) return;
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
       document.querySelectorAll('.tab-pane').forEach(p => { p.classList.remove('active'); p.scrollTop = 0; });
-      document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active');
+      document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active'); document.querySelector('.nav-item[data-tab="tabFood"]')?.setAttribute('aria-current','page');
       $('tabFood')?.classList.add('active');
       renderFoodTab();
       const resultEl = $('foodTabResult');
@@ -2815,6 +2818,8 @@ function showToast(msg) {
     toast = document.createElement('div');
     toast.id = 'appToast';
     toast.className = 'app-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
@@ -4325,7 +4330,7 @@ function renderConditions(current, daily, aq) {
   const uvLabel = uv == null ? '–' : uv < 3 ? 'Low' : uv < 6 ? 'Mod' : uv < 8 ? 'High' : 'V.High';
   const wd = windDir(current.wind_direction_10m);
   const deg = current.wind_direction_10m ?? 0;
-  const arrow = `<svg viewBox="0 0 28 28" width="17" height="17" style="display:inline-block;vertical-align:-3px;transform:rotate(${deg}deg)"><circle cx="14" cy="14" r="12.5" fill="none" stroke="var(--border)" stroke-width="1.2"/><path d="M14 3 L17.5 12 L14 10 L10.5 12 Z" fill="var(--green)" opacity="0.9"/><circle cx="14" cy="14" r="1.8" fill="var(--text-faint)"/></svg>`;
+  const arrow = `<svg aria-hidden="true" focusable="false" viewBox="0 0 28 28" width="17" height="17" style="display:inline-block;vertical-align:-3px;transform:rotate(${deg}deg)"><circle cx="14" cy="14" r="12.5" fill="none" stroke="var(--border)" stroke-width="1.2"/><path d="M14 3 L17.5 12 L14 10 L10.5 12 Z" fill="var(--green)" opacity="0.9"/><circle cx="14" cy="14" r="1.8" fill="var(--text-faint)"/></svg>`;
   const windVal = wd ? `${toWindDisplay(current.wind_speed_10m)} ${arrow} ${wd.label}` : toWindDisplay(current.wind_speed_10m);
   const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
@@ -4351,7 +4356,7 @@ function renderConditions(current, daily, aq) {
   if (aq?.current) {
     const aqi = aq.current.us_aqi ?? 0;
     const level = AQ_LEVELS.find(l => aqi <= l.max) || AQ_LEVELS[AQ_LEVELS.length - 1];
-    const dot = `<svg width="15" height="15" viewBox="0 0 16 16" style="display:inline-block;vertical-align:middle"><circle cx="8" cy="8" r="6" fill="${level.color}"/></svg>`;
+    const dot = `<svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" style="display:inline-block;vertical-align:middle"><circle cx="8" cy="8" r="6" fill="${level.color}"/></svg>`;
     tiles.push(tile(dot, `${Math.round(aqi)} AQI`, level.label, { span: true, color: level.color }));
   }
 
@@ -4501,7 +4506,7 @@ function renderWeekForecast(daily) {
     const timingLabel = d.timingHint === 'morning' ? 'AM' : d.timingHint === 'afternoon' ? 'PM' : d.timingHint === 'evening' ? 'Eve' : '';
     return `<div class="day-card ${isBest?'best-day':''}" data-daydate="${d.t}" style="cursor:pointer">
       <div class="day-name">${dayName}</div>
-      <div class="day-icon" style="color:var(--text-muted)">${weatherSvg(d.code ?? 0, 28)}</div>
+      <div class="day-icon" style="color:var(--text-muted)">${weatherSvg(d.code ?? 0, 28, d.wmo?.label || 'weather')}</div>
       <div class="day-temps">
         <div class="day-high">${toDisplay(d.maxFL)}${unitLabel()}</div>
         <div class="day-low">${toDisplay(d.minFL)}${unitLabel()}</div>
@@ -4744,9 +4749,9 @@ function renderRecoveryCard(entry) {
       const food = FOOD_DB.find(f => f.name === btn.dataset.food);
       if (food) {
         // Switch to Food tab and show this food
-        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
         document.querySelectorAll('.tab-pane').forEach(p => { p.classList.remove('active'); p.scrollTop = 0; });
-        document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active');
+        document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active'); document.querySelector('.nav-item[data-tab="tabFood"]')?.setAttribute('aria-current','page');
         $('tabFood')?.classList.add('active');
         renderFoodTab();
         const resultEl = $('foodTabResult');
@@ -4758,9 +4763,9 @@ function renderRecoveryCard(entry) {
 
   // Wire "See all" link
   $('seeAllRecovery')?.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('active'); n.removeAttribute('aria-current'); });
     document.querySelectorAll('.tab-pane').forEach(p => { p.classList.remove('active'); p.scrollTop = 0; });
-    document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active');
+    document.querySelector('.nav-item[data-tab="tabFood"]')?.classList.add('active'); document.querySelector('.nav-item[data-tab="tabFood"]')?.setAttribute('aria-current','page');
     $('tabFood')?.classList.add('active');
     renderFoodTab();
   });
