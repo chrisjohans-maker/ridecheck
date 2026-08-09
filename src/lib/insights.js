@@ -30,8 +30,22 @@ export function computeInsights(log, now = new Date()) {
     weeks.push({ label: `${ws.getMonth() + 1}/${ws.getDate()}`, mi, isCurrent: i === 0 });
   }
 
+  // Last 6 calendar months, oldest -> newest (current month last).
+  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1).getTime();
+    const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1).getTime();
+    const mi = rides.reduce((s, e) => {
+      const t = new Date(e.date).getTime();
+      return t >= mStart && t < mEnd ? s + (e.distanceMi || 0) : s;
+    }, 0);
+    months.push({ label: MON[new Date(mStart).getMonth()], mi, isCurrent: i === 0 });
+  }
+  const thisMonthMi = months[months.length - 1].mi;
+
   const byFeel = { great: 0, good: 0, tough: 0, bad: 0 };
   for (const e of rides) if (e.feel && byFeel[e.feel] != null) byFeel[e.feel]++;
 
-  return { totalRides, totalMi, avgMi, longestMi, weeks, byFeel };
+  return { totalRides, totalMi, avgMi, longestMi, weeks, months, thisMonthMi, byFeel };
 }
