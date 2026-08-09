@@ -1003,9 +1003,7 @@ function renderAll() {
     },
     () => renderNowcast(weather.minutely_15),
     () => renderRideTips(current, weather.daily),
-    (ctx) => renderQuickStats(current, weather.daily),
-    () => renderSunRow(weather.daily),
-    () => renderAirQuality(airQuality),
+    () => renderConditions(current, weather.daily, airQuality),
     () => renderHourly(weather.hourly),
     () => renderWeeklyGoal(),
     () => { renderWeekForecast(weather.daily); renderMiniOutlook(); },
@@ -4299,64 +4297,50 @@ function renderConditionsPills(factors) {
   ).join('');
 }
 
-function renderQuickStats(current, daily) {
-  if (!$('quickStats')) return;
-  const uv = current.uv_index ?? daily?.uv_index_max?.[0] ?? '–';
-  const uvLabel = uv === '–' ? '–' : uv < 3 ? 'Low' : uv < 6 ? 'Mod' : uv < 8 ? 'High' : 'V.High';
+// Unified current-conditions card — one cohesive card with uniform tiles
+// (icon + value + label), replacing the old separate quickStats/sunRow/aqCard.
+function renderConditions(current, daily, aq) {
+  const el = $('conditions');
+  if (!el || !current) return;
+
+  const uv = current.uv_index ?? daily?.uv_index_max?.[0] ?? null;
+  const uvLabel = uv == null ? '–' : uv < 3 ? 'Low' : uv < 6 ? 'Mod' : uv < 8 ? 'High' : 'V.High';
   const wd = windDir(current.wind_direction_10m);
   const deg = current.wind_direction_10m ?? 0;
-  const arrowSvg = `<svg viewBox="0 0 28 28" width="22" height="22" style="display:inline-block;vertical-align:middle;transform:rotate(${deg}deg)"><circle cx="14" cy="14" r="12.5" fill="none" stroke="var(--border)" stroke-width="1.2"/><path d="M14 3 L17.5 12 L14 10 L10.5 12 Z" fill="var(--green)" opacity="0.9"/><circle cx="14" cy="14" r="1.8" fill="var(--text-faint)"/></svg>`;
-  const windVal = wd
-    ? `${toWindDisplay(current.wind_speed_10m)} ${arrowSvg} ${wd.label}`
-    : toWindDisplay(current.wind_speed_10m);
+  const arrow = `<svg viewBox="0 0 28 28" width="17" height="17" style="display:inline-block;vertical-align:-3px;transform:rotate(${deg}deg)"><circle cx="14" cy="14" r="12.5" fill="none" stroke="var(--border)" stroke-width="1.2"/><path d="M14 3 L17.5 12 L14 10 L10.5 12 Z" fill="var(--green)" opacity="0.9"/><circle cx="14" cy="14" r="1.8" fill="var(--text-faint)"/></svg>`;
+  const windVal = wd ? `${toWindDisplay(current.wind_speed_10m)} ${arrow} ${wd.label}` : toWindDisplay(current.wind_speed_10m);
+  const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
-  const stats = [
-    { icon:'💨', value:windVal, label:'Wind', html:true },
-    { icon:'💧', value:`${current.relative_humidity_2m}%`,          label:'Humidity' },
-    { icon:'🌡️', value:`${toDisplay(current.temperature_2m)}${unitLabel()}`, label:'Temp' },
-    { icon:'☀️', value:uvLabel,                                      label:`UV ${uv === '–' ? '' : Math.round(uv)}` },
+  const tile = (icon, value, label, opts = {}) => `
+    <div style="background:var(--bg);border-radius:12px;padding:11px 13px;display:flex;align-items:center;gap:10px;${opts.span ? 'grid-column:1/-1;' : ''}">
+      <span style="font-size:1.25rem;line-height:1;flex-shrink:0;">${icon}</span>
+      <div style="min-width:0;">
+        <div style="font-family:'Space Grotesk',monospace;font-weight:700;font-size:1.02rem;color:${opts.color || 'var(--text)'};line-height:1.15;">${value}</div>
+        <div style="font-size:0.64rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">${escHtml(label)}</div>
+      </div>
+    </div>`;
+
+  const tiles = [
+    tile('🌡️', `${toDisplay(current.temperature_2m)}${unitLabel()}`, 'Temp'),
+    tile('💨', windVal, 'Wind'),
+    tile('💧', `${current.relative_humidity_2m}%`, 'Humidity'),
+    tile('☀️', escHtml(uvLabel), `UV ${uv == null ? '' : Math.round(uv)}`),
   ];
-  $('quickStats').innerHTML = stats.map(s => `
-    <div class="stat-card">
-      <div class="stat-card-icon">${s.icon}</div>
-      <div>
-        <div class="stat-card-value">${s.html ? s.value : escHtml(String(s.value))}</div>
-        <div class="stat-card-label">${escHtml(s.label)}</div>
-      </div>
-    </div>
-  `).join('');
-}
+  if (daily?.sunrise?.[0]) {
+    tiles.push(tile('🌅', escHtml(fmtTime(daily.sunrise[0])), 'Sunrise'));
+    tiles.push(tile('🌇', escHtml(fmtTime(daily.sunset[0])), 'Sunset'));
+  }
+  if (aq?.current) {
+    const aqi = aq.current.us_aqi ?? 0;
+    const level = AQ_LEVELS.find(l => aqi <= l.max) || AQ_LEVELS[AQ_LEVELS.length - 1];
+    const dot = aqi <= 40 ? '🟢' : aqi <= 60 ? '🟡' : aqi <= 80 ? '🟠' : '🔴';
+    tiles.push(tile(dot, `${Math.round(aqi)} AQI`, level.label, { span: true, color: level.color }));
+  }
 
-function renderSunRow(daily) {
-  if (!daily?.sunrise?.[0]) { $('sunRow').style.display = 'none'; return; }
-  const fmt = iso => new Date(iso).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
-  $('sunRow').innerHTML = `
-    <div class="sun-card">
-      <div class="sun-card-icon">🌅</div>
-      <div><div class="sun-card-label">Sunrise</div><div class="sun-card-value">${fmt(daily.sunrise[0])}</div></div>
-    </div>
-    <div class="sun-card">
-      <div class="sun-card-icon">🌇</div>
-      <div><div class="sun-card-label">Sunset</div><div class="sun-card-value">${fmt(daily.sunset[0])}</div></div>
-    </div>
-  `;
-}
-
-function renderAirQuality(aq) {
-  const card = $('aqCard');
-  if (!card) return;
-  if (!aq?.current) { card.style.display = 'none'; return; }
-  card.style.display = '';
-  const aqi = aq.current.us_aqi ?? 0;
-  const level = AQ_LEVELS.find(l => aqi <= l.max) || AQ_LEVELS[AQ_LEVELS.length-1];
-  card.innerHTML = `
-    <div class="aq-compact">
-      <div class="stat-card-icon" style="font-size:1.2rem">${aqi <= 40 ? '🟢' : aqi <= 60 ? '🟡' : aqi <= 80 ? '🟠' : '🔴'}</div>
-      <div>
-        <div class="stat-card-value" style="color:${level.color}">${Math.round(aqi)} AQI</div>
-        <div class="stat-card-label">${level.label}</div>
-      </div>
-    </div>
+  el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:10px;');
+  el.innerHTML = `
+    <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:10px;">Conditions</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">${tiles.join('')}</div>
   `;
 }
 
