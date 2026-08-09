@@ -2299,6 +2299,11 @@ function resetLogForm() {
 }
 
 function saveEntry() {
+  // Re-entrancy guard: #logSave is wired via a delegated click, a direct click,
+  // and touchend — dedupe so one tap can't create two entries.
+  const _t = Date.now();
+  if (saveEntry._last && _t - saveEntry._last < 800) return;
+  saveEntry._last = _t;
   try {
     const distVal  = parseFloat($('logDistance')?.value) || 0;
     const durVal   = parseInt($('logDuration')?.value) || 0;
@@ -2328,7 +2333,9 @@ function saveEntry() {
 
     const log = getRideLog();
     log.unshift(entry);
-    if (log.length > 100) log.pop();
+    // Safety cap only — well above any real ride history (localStorage holds thousands).
+    // Previously 100, which silently dropped the oldest ride on every new log past 100.
+    if (log.length > 5000) log.pop();
     saveRideLog(log);
 
     if (navigator.vibrate) navigator.vibrate(40);
