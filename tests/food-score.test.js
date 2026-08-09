@@ -60,6 +60,12 @@ describe('scoreFood — edge cases', () => {
     const r = scoreFood(F.soda);
     expect(r.why).toMatch(/light on nutrition|fast carbs/i);
   });
+  it('nutrient-dense but low-calorie foods (greens) are capped — not top fuel', () => {
+    const kale = scoreFood({ cal: 49, carbs: 9, protein: 4.3, fat: 0.9, fiber: 3.6 });
+    expect(kale.score).toBeLessThanOrEqual(72);
+    expect(kale.when).not.toBe('avoid');
+  });
+
   it('water/negligible energy is neutral, not fuel', () => {
     const r = scoreFood(F.water);
     expect(r.score).toBeGreaterThan(40);
