@@ -16,16 +16,21 @@ const P = {
   sunset: '<path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="9" x2="12" y2="2"/><polyline points="16 5 12 9 8 5"/><line x1="2" y1="18" x2="4" y2="18"/><line x1="20" y1="18" x2="22" y2="18"/><line x1="4.9" y1="10.9" x2="6.3" y2="12.3"/><line x1="17.7" y1="12.3" x2="19.1" y2="10.9"/><line x1="1" y1="22" x2="23" y2="22"/>',
 };
 
-function wrap(paths, px, label) {
+// Semantic colors — keep the icons a cohesive system but warm/legible, not cold grey.
+const WEATHER_COLOR = { sun: '#F2B01E', partly: '#F2B01E', cloud: '#9AA6B2', fog: '#9AA6B2', rain: '#5AA0E0', snow: '#8EC5E6', thunder: '#E9A01A' };
+const UI_COLOR = { thermometer: '#E07A5F', droplet: '#5AA0E0', wind: '#7FB5A6', sun: '#F2B01E', sunrise: '#F2994A', sunset: '#E9784A' };
+
+function wrap(paths, px, label, color) {
   // Labeled → announced as an image; unlabeled → decorative (hidden from AT,
   // since these icons sit next to text that already conveys the meaning).
   const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true" focusable="false"';
-  return `<svg ${a11y} width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-0.18em;">${paths}</svg>`;
+  const col = color ? `color:${color};` : '';
+  return `<svg ${a11y} width="${px}" height="${px}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-0.18em;${col}">${paths}</svg>`;
 }
 
 // A UI icon by name (thermometer, droplet, wind, sun, sunrise, sunset).
 export function uiIcon(name, px = 20, label) {
-  return P[name] ? wrap(P[name], px, label) : '';
+  return P[name] ? wrap(P[name], px, label, UI_COLOR[name]) : '';
 }
 
 // Map a WMO weather code to an icon type.
@@ -44,5 +49,6 @@ export function weatherType(code) {
 // Weather icon (inline SVG) for a WMO code. Pass `label` (e.g. the condition
 // name) to announce it to screen readers; omit for decorative use next to text.
 export function weatherSvg(code, px = 20, label) {
-  return wrap(P[weatherType(code)], px, label);
+  const type = weatherType(code);
+  return wrap(P[type], px, label, WEATHER_COLOR[type]);
 }
