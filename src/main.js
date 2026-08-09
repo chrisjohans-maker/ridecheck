@@ -11,6 +11,7 @@ import { weatherPenalty } from './lib/scoring.js';
 import { summarizeNowcast } from './lib/nowcast.js';
 import { windStrategy, latestSafeStart } from './lib/advice.js';
 import { computeInsights } from './lib/insights.js';
+import { weatherSvg, uiIcon } from './lib/weather-icons.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
 
@@ -944,7 +945,7 @@ function renderRideTips(current, daily) {
   const ss = latestSafeStart(durationMins, sunsetHourF, locationNow().hourF);
   if (ss) {
     const suffix = appState.distanceMi ? '' : ` (${Math.round(distMi)} mi)`;
-    tips.push({ icon: ss.feasible ? '🌇' : '🔦', text: ss.text + suffix });
+    tips.push({ icon: ss.feasible ? uiIcon('sunset', 18) : '🔦', text: ss.text + suffix });
   }
 
   if (!tips.length) { el.setAttribute('style', 'display:none'); return; }
@@ -963,7 +964,7 @@ function renderNowcast(minutely15) {
   const s = summarizeNowcast(minutely15, locationNow().wall.getTime());
   if (!s.hasData) { el.setAttribute('style', 'display:none'); return; }
 
-  const icon = s.state === 'dry' ? '🚴' : s.state === 'stopping' ? '🌦️' : '🌧️';
+  const icon = s.state === 'dry' ? '🚴' : weatherSvg(s.state === 'stopping' ? 80 : 63, 22);
 
   let bar = '';
   if (s.peakMm > 0) {
@@ -981,7 +982,7 @@ function renderNowcast(minutely15) {
   el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 18px;margin-bottom:10px;');
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;">
-      <span style="font-size:1.2rem;line-height:1;">${icon}</span>
+      <span style="font-size:1.2rem;line-height:1;color:var(--text);">${icon}</span>
       <span style="font-family:'Space Grotesk',monospace;font-size:0.95rem;font-weight:600;color:var(--text);">${escHtml(s.text)}</span>
     </div>
     ${bar}
@@ -3431,13 +3432,13 @@ function openForecastDayDetail(dayIndex) {
       <span class="forecast-detail-score-label">${scoreLabel} to ride</span>
     </div>
     <div class="forecast-detail-summary">
-      ${d.wmo?.icon || "☀️"} ${d.wmo?.label || ''}  ·
+      <span style="color:var(--text-muted)">${weatherSvg(d.code ?? 0, 18)}</span> ${d.wmo?.label || ''}  ·
       ${toDisplay(d.maxFL)}${unitLabel()} high · ${toDisplay(d.minFL)}${unitLabel()} low
-      ${d.sunset ? ` · 🌇 ${d.sunset}` : ''}
+      ${d.sunset ? ` · <span style="color:var(--text-muted)">${uiIcon('sunset', 13)}</span> ${d.sunset}` : ''}
     </div>
     ${bestWindowHtml}
     <div style="font-size:0.88rem;color:var(--text-muted);margin-bottom:14px;padding:10px 12px;background:var(--bg);border-radius:8px;">
-      👕 ${d.maxFL < 32 ? 'Full winter kit' : d.maxFL < 45 ? 'Tights + thermal jersey' : d.maxFL < 58 ? 'Arm warmers + vest' : d.maxFL < 75 ? 'Shorts and jersey' : 'Light kit + sunscreen'}${[51,53,55,61,63,65,80,81,82,95,96,99].includes(d.wmo?.code ?? 0) ? ' + rain jacket' : ''}
+      👕 ${d.maxFL < 32 ? 'Full winter kit' : d.maxFL < 45 ? 'Tights + thermal jersey' : d.maxFL < 58 ? 'Arm warmers + vest' : d.maxFL < 75 ? 'Shorts and jersey' : 'Light kit + sunscreen'}${[51,53,55,61,63,65,80,81,82,95,96,99].includes(d.code ?? 0) ? ' + rain jacket' : ''}
     </div>
     <div class="forecast-detail-section-label">Hourly</div>
     <div class="forecast-hours-grid">${hourlyHtml}</div>
@@ -3687,7 +3688,7 @@ function renderMiniOutlook() {
         const scoreColor = d.score >= 70 ? 'var(--green)' : d.score >= 45 ? '#E9A01A' : '#C1121F';
         const timingTxt = d.timingHint === 'morning' ? 'Ride early' : d.timingHint === 'evening' ? 'Ride late' : d.timingHint === 'afternoon' ? 'Ride PM' : '';
         const verdict = d.score >= 70 ? (timingTxt || 'Ride') : d.score >= 45 ? (timingTxt || 'Maybe') : 'Skip';
-        const icon = d.wmo?.icon || '🌡️';
+        const icon = weatherSvg(d.code ?? 0, 20);
         return `<div class="mini-outlook-card" data-daydate="${d.t}">
           <div class="mo-day">${dayName}</div>
           <div class="mo-icon">${icon}</div>
@@ -4286,8 +4287,8 @@ function renderConfidence(score, factors) {
   const verdictEl = $('meterVerdict');
   if (scoreEl)   { scoreEl.textContent = score; scoreEl.style.color = color; }
   if (verdictEl) {
-    const wmo = WMO_CODES[appState.weather?.current?.weather_code] || {};
-    verdictEl.innerHTML = (wmo.icon ? wmo.icon + ' ' : '') + verdict.toUpperCase();
+    const code = appState.weather?.current?.weather_code;
+    verdictEl.innerHTML = (code != null ? weatherSvg(code, 16) + ' ' : '') + verdict.toUpperCase();
     verdictEl.style.color = color;
   }
   if ($('confidenceSummary')) $('confidenceSummary').textContent = summary;
@@ -4330,7 +4331,7 @@ function renderConditions(current, daily, aq) {
 
   const tile = (icon, value, label, opts = {}) => `
     <div style="background:var(--bg);border-radius:12px;padding:11px 13px;display:flex;align-items:center;gap:10px;${opts.span ? 'grid-column:1/-1;' : ''}">
-      <span style="font-size:1.25rem;line-height:1;flex-shrink:0;">${icon}</span>
+      <span style="line-height:0;flex-shrink:0;color:var(--text-muted);">${icon}</span>
       <div style="min-width:0;">
         <div style="font-family:'Space Grotesk',monospace;font-weight:700;font-size:1.02rem;color:${opts.color || 'var(--text)'};line-height:1.15;">${value}</div>
         <div style="font-size:0.64rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">${escHtml(label)}</div>
@@ -4338,19 +4339,19 @@ function renderConditions(current, daily, aq) {
     </div>`;
 
   const tiles = [
-    tile('🌡️', `${toDisplay(current.temperature_2m)}${unitLabel()}`, 'Temp'),
-    tile('💨', windVal, 'Wind'),
-    tile('💧', `${current.relative_humidity_2m}%`, 'Humidity'),
-    tile('☀️', escHtml(uvLabel), `UV ${uv == null ? '' : Math.round(uv)}`),
+    tile(uiIcon('thermometer', 22), `${toDisplay(current.temperature_2m)}${unitLabel()}`, 'Temp'),
+    tile(uiIcon('wind', 22), windVal, 'Wind'),
+    tile(uiIcon('droplet', 22), `${current.relative_humidity_2m}%`, 'Humidity'),
+    tile(uiIcon('sun', 22), escHtml(uvLabel), `UV ${uv == null ? '' : Math.round(uv)}`),
   ];
   if (daily?.sunrise?.[0]) {
-    tiles.push(tile('🌅', escHtml(fmtTime(daily.sunrise[0])), 'Sunrise'));
-    tiles.push(tile('🌇', escHtml(fmtTime(daily.sunset[0])), 'Sunset'));
+    tiles.push(tile(uiIcon('sunrise', 22), escHtml(fmtTime(daily.sunrise[0])), 'Sunrise'));
+    tiles.push(tile(uiIcon('sunset', 22), escHtml(fmtTime(daily.sunset[0])), 'Sunset'));
   }
   if (aq?.current) {
     const aqi = aq.current.us_aqi ?? 0;
     const level = AQ_LEVELS.find(l => aqi <= l.max) || AQ_LEVELS[AQ_LEVELS.length - 1];
-    const dot = aqi <= 40 ? '🟢' : aqi <= 60 ? '🟡' : aqi <= 80 ? '🟠' : '🔴';
+    const dot = `<svg width="15" height="15" viewBox="0 0 16 16" style="display:inline-block;vertical-align:middle"><circle cx="8" cy="8" r="6" fill="${level.color}"/></svg>`;
     tiles.push(tile(dot, `${Math.round(aqi)} AQI`, level.label, { span: true, color: level.color }));
   }
 
@@ -4373,7 +4374,7 @@ function renderHourly(hourly) {
     const label = hr===0?'12am':hr===12?'12pm':hr<12?`${hr}am`:`${hr-12}pm`;
     return `<div class="hour-card">
       <span class="hour-time">${label}</span>
-      <span class="hour-icon">${wmo.icon}</span>
+      <span class="hour-icon" style="color:var(--text-muted)">${weatherSvg(h.code, 22)}</span>
       <span class="hour-temp">${toDisplay(h.temp)}${unitLabel()}</span>
       <span class="hour-pop" style="opacity:${h.pop>15?1:0}">${h.pop>15?`💧${h.pop}%`:'-'}</span>
     </div>`;
@@ -4488,7 +4489,7 @@ function renderWeekForecast(daily) {
     const sunset = sunsetRaw ? new Date(sunsetRaw).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : null;
     const sunriseRaw = daily.sunrise?.[i];
     const sunrise = sunriseRaw ? new Date(sunriseRaw).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : null;
-    return { t, wmo, maxT, minT, maxFL, minFL, score: Math.max(0, Math.min(100, score)), sunset, sunrise, timingHint: typeof timingHint !== 'undefined' ? timingHint : null };
+    return { t, wmo, code, maxT, minT, maxFL, minFL, score: Math.max(0, Math.min(100, score)), sunset, sunrise, timingHint: typeof timingHint !== 'undefined' ? timingHint : null };
   });
   const bestScore = Math.max(...days.slice(1).map(d => d.score));
   appState.forecastDays = days;
@@ -4500,12 +4501,12 @@ function renderWeekForecast(daily) {
     const timingLabel = d.timingHint === 'morning' ? 'AM' : d.timingHint === 'afternoon' ? 'PM' : d.timingHint === 'evening' ? 'Eve' : '';
     return `<div class="day-card ${isBest?'best-day':''}" data-daydate="${d.t}" style="cursor:pointer">
       <div class="day-name">${dayName}</div>
-      <div class="day-icon">${d.wmo?.icon || "☀️"}</div>
+      <div class="day-icon" style="color:var(--text-muted)">${weatherSvg(d.code ?? 0, 28)}</div>
       <div class="day-temps">
         <div class="day-high">${toDisplay(d.maxFL)}${unitLabel()}</div>
         <div class="day-low">${toDisplay(d.minFL)}${unitLabel()}</div>
         <div style="font-size:0.68rem;color:var(--text-faint);margin-top:1px;">feels like</div>
-        ${d.sunset ? `<div style="font-size:0.7rem;color:var(--text-faint);margin-top:3px;">🌇 ${d.sunset}</div>` : ''}
+        ${d.sunset ? `<div style="font-size:0.7rem;color:var(--text-faint);margin-top:3px;">${uiIcon('sunset', 12)} ${d.sunset}</div>` : ''}
       </div>
       <div class="day-score-wrap">
         ${isBest?'<span class="best-day-badge">Best day</span>':''}
