@@ -30,11 +30,20 @@ export function computeInsights(log, now = new Date()) {
     weeks.push({ label: `${ws.getMonth() + 1}/${ws.getDate()}`, mi, isCurrent: i === 0 });
   }
 
-  // Last 6 calendar months, oldest -> newest (current month last).
+  // Calendar months from the first logged month through the current month, capped
+  // at the last 6 (oldest -> newest, current month last). We don't render months
+  // before the user's first ride — empty leading bars just look broken. Interior
+  // zero months (rode in June and August but not July) are kept, honestly showing the gap.
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const firstRideTime = rides.length
+    ? Math.min(...rides.map(e => new Date(e.date).getTime()))
+    : now.getTime();
+  const fr = new Date(firstRideTime);
+  const firstMonthStart = new Date(fr.getFullYear(), fr.getMonth(), 1).getTime();
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const mStart = new Date(now.getFullYear(), now.getMonth() - i, 1).getTime();
+    if (mStart < firstMonthStart) continue; // skip months before the first ride
     const mEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1).getTime();
     const mi = rides.reduce((s, e) => {
       const t = new Date(e.date).getTime();
@@ -42,7 +51,7 @@ export function computeInsights(log, now = new Date()) {
     }, 0);
     months.push({ label: MON[new Date(mStart).getMonth()], mi, isCurrent: i === 0 });
   }
-  const thisMonthMi = months[months.length - 1].mi;
+  const thisMonthMi = months.length ? months[months.length - 1].mi : 0;
 
   const byFeel = { great: 0, good: 0, tough: 0, bad: 0 };
   for (const e of rides) if (e.feel && byFeel[e.feel] != null) byFeel[e.feel]++;

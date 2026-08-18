@@ -44,20 +44,45 @@ describe('computeInsights', () => {
     expect(r.weeks[6].mi).toBe(30); // previous week
   });
 
-  it('buckets distance into the last 6 calendar months', () => {
+  it('buckets distance by month, starting at the first logged month (no empty leading bars)', () => {
     const log = [
-      { date: daysAgo(0), distanceMi: 20 },   // this month
-      { date: daysAgo(2), distanceMi: 30 },   // this month
+      { date: daysAgo(0), distanceMi: 20 },   // this month (Aug)
+      { date: daysAgo(2), distanceMi: 30 },   // this month (Aug)
       { date: '2026-07-15T09:00:00', distanceMi: 40 }, // last month (July)
     ];
-    const r = computeInsights(log, now); // now = Aug 12 2026
-    expect(r.months).toHaveLength(6);
-    expect(r.months[5].isCurrent).toBe(true);
-    expect(r.months[5].label).toBe('Aug');
-    expect(r.months[5].mi).toBe(50);       // this month
+    const r = computeInsights(log, now); // now = Aug 12 2026; first ride = Jul
+    // Only Jul + Aug — the four months before the first ride are not rendered.
+    expect(r.months).toHaveLength(2);
+    expect(r.months.map(m => m.label)).toEqual(['Jul', 'Aug']);
+    expect(r.months[1].isCurrent).toBe(true);
+    expect(r.months[1].mi).toBe(50);       // this month (Aug)
     expect(r.thisMonthMi).toBe(50);
-    expect(r.months[4].label).toBe('Jul');
-    expect(r.months[4].mi).toBe(40);       // last month
+    expect(r.months[0].label).toBe('Jul');
+    expect(r.months[0].mi).toBe(40);       // last month
+  });
+
+  it('caps at the last 6 months even when the first ride is older', () => {
+    const log = [
+      { date: '2026-01-10T09:00:00', distanceMi: 100 }, // Jan — outside the 6-month window
+      { date: '2026-03-10T09:00:00', distanceMi: 50 },  // Mar — oldest visible month
+      { date: daysAgo(0), distanceMi: 20 },              // Aug
+    ];
+    const r = computeInsights(log, now); // now = Aug 12 2026
+    // Window is Mar..Aug (6). Jan's 100mi is not shown, but still counts in totals.
+    expect(r.months).toHaveLength(6);
+    expect(r.months[0].label).toBe('Mar');
+    expect(r.months[5].label).toBe('Aug');
+    expect(r.totalMi).toBe(170); // totals are unaffected by the month window
+  });
+
+  it('keeps interior zero months but drops leading ones', () => {
+    const log = [
+      { date: '2026-06-10T09:00:00', distanceMi: 10 }, // Jun (first ride)
+      { date: daysAgo(0), distanceMi: 15 },             // Aug — July is an honest gap
+    ];
+    const r = computeInsights(log, now); // now = Aug 12 2026
+    expect(r.months.map(m => m.label)).toEqual(['Jun', 'Jul', 'Aug']);
+    expect(r.months[1].mi).toBe(0); // July gap preserved
   });
 
   it('counts rides by feel', () => {
