@@ -14,6 +14,7 @@ import { computeInsights } from './lib/insights.js';
 import { weatherSvg, uiIcon } from './lib/weather-icons.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
+import { mergeHourlyNWS } from './lib/weather-merge.js';
 
 // Build id baked in at build time (Vite `define`); 'dev' in un-built contexts.
 const RUNNING_BUILD = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
@@ -703,7 +704,12 @@ async function runCheckFromGeo(geo) {
           const omSunset = weather.daily?.sunset;
           const omUVMax = weather.daily?.uv_index_max;
           
-          appState.weather.hourly = { ...appState.weather.hourly, ...nws.hourly };
+          // Time-aligned merge, NOT a blind overwrite. NWS hourly starts at the
+          // current hour, so a plain spread would (a) drop today's earlier hours —
+          // tapping "Today" showed a partial day — and (b) leave uv_index on
+          // Open-Meteo's midnight-based axis, misaligned with every NWS array.
+          // Keep OM's full-day time axis and overlay NWS values where the hour exists.
+          appState.weather.hourly = mergeHourlyNWS(appState.weather.hourly, nws.hourly);
           appState.weather.daily = { ...appState.weather.daily, ...nws.daily };
           
           // Restore Open-Meteo fields NWS doesn't provide
@@ -3414,6 +3420,7 @@ function openForecastDayDetail(dayIndex) {
   }
 
   // Hourly breakdown for the day
+  const windUnit = appState.tempUnit === 'C' ? 'km/h' : 'mph';
   const hourlyHtml = dayHourly.time.map((t, i) => {
     const hour = new Date(t).getHours();
     if (hour < 5 || hour > 21) return ''; // skip overnight
@@ -3421,11 +3428,24 @@ function openForecastDayDetail(dayIndex) {
     const wmo   = WMO_CODES[dayHourly.weather_code[i]] || { icon:'🌡️' };
     const temp  = toDisplay(dayHourly.apparent_temperature[i]);
     const pop   = dayHourly.precipitation_probability[i] ?? 0;
+    // Per-hour wind: rotated arrow points the way the wind blows (data is the
+    // direction it comes FROM, so add 180°), speed in the user's unit, color +
+    // ‼ flag once it's strong enough to matter to a rider.
+    const wspd  = dayHourly.wind_speed_10m[i] ?? 0;
+    const wdeg  = dayHourly.wind_direction_10m[i];
+    const wd    = windDir(wdeg);
+    const wDisp = appState.tempUnit === 'C' ? Math.round(wspd * 1.60934) : Math.round(wspd);
+    const wColor = wspd >= 25 ? '#C1121F' : wspd >= 16 ? '#E9A01A' : 'var(--text-muted)';
+    const wFlag  = wspd >= 16 ? '‼' : '';
+    const arrow  = wdeg == null ? ''
+      : `<span style="display:inline-block;transform:rotate(${Math.round(wdeg) + 180}deg);line-height:1">↑</span>`;
+    const windCell = `<span class="forecast-hour-wind" title="Wind from ${wd ? wd.label : '—'}, ${wDisp} ${windUnit}" style="min-width:56px;text-align:right;font-size:0.76rem;font-weight:600;color:${wColor};font-family:var(--font-data)">${arrow} ${wDisp}${wFlag}</span>`;
     return `
       <div class="forecast-hour-item">
         <span class="forecast-hour-time">${label}</span>
         <span class="forecast-hour-icon">${wmo.icon}</span>
         <span class="forecast-hour-temp">${temp}${unitLabel()}</span>
+        ${windCell}
         ${pop > 0 ? `<span class="forecast-hour-pop" style="color:${pop > 50 ? '#C1121F' : pop > 20 ? '#E9A01A' : 'var(--text-faint)'};font-size:0.72rem">💧${pop}%</span>` : ''}
       </div>`;
   }).join('');
