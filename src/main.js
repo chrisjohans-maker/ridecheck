@@ -4390,18 +4390,32 @@ function renderConditions(current, daily, aq) {
 function renderHourly(hourly) {
   if (!$('hourlyStrip')) return;
   const now = locationNow().wall; // location wall clock, comparable to new Date(naive forecast string)
+  const windUnit = appState.tempUnit === 'C' ? 'km/h' : 'mph';
   const items = hourly.time
-    .map((t,i) => ({ time:new Date(t), temp:(hourly.apparent_temperature?.[i] ?? hourly.temperature_2m[i]), code:hourly.weather_code[i], pop:hourly.precipitation_probability[i] }))
+    .map((t,i) => ({ time:new Date(t), temp:(hourly.apparent_temperature?.[i] ?? hourly.temperature_2m[i]), code:hourly.weather_code[i], pop:hourly.precipitation_probability[i], wspd:hourly.wind_speed_10m?.[i], wdeg:hourly.wind_direction_10m?.[i] }))
     .filter(h => h.time > now).slice(0,8);
   $('hourlyStrip').innerHTML = items.map(h => {
     const wmo = WMO_CODES[h.code] || { icon:'🌡️' };
     const hr = h.time.getHours();
     const label = hr===0?'12am':hr===12?'12pm':hr<12?`${hr}am`:`${hr-12}pm`;
+    // Per-hour wind, split into two card components: a direction arrow that
+    // points the way the wind blows (data is the direction it comes FROM, so
+    // add 180°) with its compass label, and a separate speed in the user's
+    // unit — colored + ‼ once it's strong enough to matter to a rider.
+    const wspd  = h.wspd ?? 0;
+    const wd    = windDir(h.wdeg);
+    const wDisp = appState.tempUnit === 'C' ? Math.round(wspd * 1.60934) : Math.round(wspd);
+    const wColor = wspd >= 25 ? '#C1121F' : wspd >= 16 ? '#E9A01A' : 'var(--text-muted)';
+    const wFlag  = wspd >= 16 ? '‼' : '';
+    const arrow  = h.wdeg == null ? ''
+      : `<span style="display:inline-block;transform:rotate(${Math.round(h.wdeg) + 180}deg);line-height:1">↑</span>`;
     return `<div class="hour-card">
       <span class="hour-time">${label}</span>
       <span class="hour-icon" style="color:var(--text-muted)">${weatherSvg(h.code, 22)}</span>
       <span class="hour-temp">${toDisplay(h.temp)}${unitLabel()}</span>
       <span class="hour-pop" style="opacity:${h.pop>15?1:0}">${h.pop>15?`💧${h.pop}%`:'-'}</span>
+      <span class="hour-wind-dir" title="Wind from ${wd ? wd.label : '—'}">${arrow} ${wd ? wd.label : '—'}</span>
+      <span class="hour-wind" title="Wind ${wDisp} ${windUnit}" style="color:${wColor}">${wDisp} ${windUnit}${wFlag}</span>
     </div>`;
   }).join('');
 }
