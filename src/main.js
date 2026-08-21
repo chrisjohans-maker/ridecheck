@@ -2178,31 +2178,13 @@ function openLogSheet() {
   // Render saved setup chips
   renderLogSetups();
 
-  // Build summary
+  // Prefill distance/duration from the current forecast context.
   renderLogPrefilled();
 
-  // Wire summary card tap to toggle edit mode
-  const card = $('logSummaryCard');
-  const editEl = $('logSummaryEdit');
-  const displayEl = $('logSummaryDisplay');
-  if (card && !card._wired) {
-    card._wired = true;
-    card.addEventListener('click', e => {
-      if (e.target.closest('#logSummaryEdit')) return; // don\u0027t toggle when interacting with inputs
-      const isEditing = !editEl.classList.contains('hidden');
-      editEl.classList.toggle('hidden', isEditing);
-      displayEl.classList.toggle('hidden', !isEditing);
-      card.style.cursor = isEditing ? 'pointer' : 'default';
-      if (!isEditing) $('logDistance')?.focus();
-    });
-    $('logEditDone')?.addEventListener('click', e => {
-      e.stopPropagation();
-      editEl.classList.add('hidden');
-      displayEl.classList.remove('hidden');
-      card.style.cursor = 'pointer';
-      // Update summary display with new values
-      renderLogSummary();
-    });
+  // Wire the mi/km unit toggle once (fields are always visible now — no
+  // tap-to-reveal card to toggle).
+  if (!openLogSheet._unitWired) {
+    openLogSheet._unitWired = true;
     // Unit toggle in log form
     document.querySelectorAll('.unit-btn[data-logunit]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2244,54 +2226,24 @@ function renderLogPrefilled() {
 }
 
 function renderLogSummary() {
-  const display = $('logSummaryDisplay');
-  const bike   = $('logBike')?.value?.trim() || null;
-  if (!display) return;
-
-  // Pre-fill the edit fields too
+  // Ride-detail fields are shown inline, so this just seeds them from the
+  // current forecast context (distance/duration) when we have one, and keeps
+  // the mi/km toggle in sync. Any field with no context is cleared so a
+  // previous log's values never linger.
   const distVal = appState.distanceMi
     ? (logUnit === 'km' ? Math.round(appState.distanceMi * 1.60934 * 10) / 10 : Math.round(appState.distanceMi * 10) / 10)
     : null;
   const durVal = appState.distanceMi ? estimateDuration(appState.distanceMi, appState.rideType) : null;
-  
 
-  // Set edit field values silently
   const distInput = $('logDistance');
   const durInput  = $('logDuration');
-  if (distInput && distVal) distInput.value = distVal;
-  if (durInput && durVal) durInput.value = durVal;
-  if ($('logBike') && bike) $('logBike').value = bike;
+  if (distInput) distInput.value = distVal || '';
+  if (durInput)  durInput.value  = durVal  || '';
 
-  // Set unit toggle to match
+  // Keep the mi/km toggle matching the active unit.
   document.querySelectorAll('.unit-btn[data-logunit]').forEach(b => {
     b.classList.toggle('active', b.dataset.logunit === logUnit);
   });
-
-  // Build summary items
-  const items = [];
-
-  if (distVal) {
-    const durLabel = durVal
-      ? (durVal >= 60 ? `${Math.floor(durVal/60)}h${durVal%60?` ${durVal%60}m`:''}` : `${durVal}m`)
-      : null;
-    items.push(`<div class="log-summary-item"><span class="log-summary-item-icon">🗺️</span><span>${distVal} ${logUnit}${durLabel ? ` · ${durLabel}` : ''}</span></div>`);
-  }
-
-  if (bike) {
-    items.push(`<div class="log-summary-item"><span class="log-summary-item-icon">🚲</span><span>${escHtml(bike)}</span></div>`);
-  }
-
-  if (appState.weather?.current) {
-    const c   = appState.weather.current;
-    const wmo = WMO_CODES[c.weather_code] || { icon: '🌡️' };
-    items.push(`<div class="log-summary-item"><span class="log-summary-item-icon">${wmo.icon}</span><span>${toDisplay(c.temperature_2m)}${unitLabel()}</span></div>`);
-  }
-
-  if (!items.length) {
-    display.innerHTML = `<div class="log-summary-item" style="color:var(--text-faint)">Tap to add distance, bike &amp; notes</div>`;
-  } else {
-    display.innerHTML = items.join('');
-  }
 }
 
 
