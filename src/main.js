@@ -1338,14 +1338,14 @@ function setupGearTab() {
 
   // rideType derived from bikeType on restore above
 
-  // Restore intensity
+  // Restore intensity. Always sync the active pill to appState.intensity —
+  // even with no saved value — so the highlighted pill matches state and a
+  // saved setup can't capture an intensity the user never saw selected.
   const savedIntensity = localStorage.getItem('ridecheck_intensity');
-  if (savedIntensity) {
-    appState.intensity = savedIntensity;
-    document.querySelectorAll('.ride-pill[data-intensity]').forEach(p => {
-      p.classList.toggle('active', p.dataset.intensity === savedIntensity);
-    });
-  }
+  if (savedIntensity) appState.intensity = savedIntensity;
+  document.querySelectorAll('.ride-pill[data-intensity]').forEach(p => {
+    p.classList.toggle('active', p.dataset.intensity === appState.intensity);
+  });
 
   // Restore distance unit
   const savedDistUnit = localStorage.getItem('ridecheck_dist_unit');
@@ -1942,6 +1942,8 @@ function setupProfiles() {
     if (profiles.length > 5) profiles.pop();
     localStorage.setItem('ridecheck_profiles', JSON.stringify(profiles));
     renderProfileChips();
+    if (navigator.vibrate) navigator.vibrate(40);
+    showToast('Setup saved');
   });
 }
 
