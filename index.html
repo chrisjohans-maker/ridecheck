@@ -2276,13 +2276,20 @@ input, select, textarea { font-size: 16px !important; }
 /* Log sheet actions */
 .log-sheet-actions { display: flex !important; gap: 10px !important; align-items: center !important; margin-top: 16px !important; padding-top: 16px !important; border-top: 1px solid var(--border) !important; }
 .log-sheet-cancel-btn { background: none !important; border: none !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 0.88rem !important; color: var(--text-muted) !important; cursor: pointer !important; padding: 10px 16px !important; -webkit-appearance: none !important; }
-.log-label { flex: 1 !important; padding: 12px 20px !important; background: var(--green) !important; color: #fff !important; border: none !important; border-radius: 12px !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 0.92rem !important; font-weight: 700 !important; cursor: pointer !important; text-align: center !important; -webkit-appearance: none !important; }
+.log-label { display: block !important; margin-bottom: 6px !important; padding: 0 !important; background: none !important; border: none !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 0.78rem !important; font-weight: 600 !important; color: var(--text-muted) !important; text-align: left !important; }
 
-/* Log text inputs */
-.log-text-input { width: 100% !important; padding: 10px 14px !important; background: var(--bg) !important; border: 1.5px solid var(--border) !important; border-radius: 10px !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 16px !important; color: var(--text) !important; -webkit-appearance: none !important; }
+/* Log text inputs (incl. notes textarea — was rendering white in dark mode) */
+.log-text-input,
+.log-edit-row textarea,
+.log-edit-fields textarea { width: 100% !important; padding: 10px 14px !important; background: var(--bg) !important; border: 1.5px solid var(--border) !important; border-radius: 10px !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 16px !important; color: var(--text) !important; -webkit-appearance: none !important; box-sizing: border-box !important; }
+.log-edit-row textarea,
+.log-edit-fields textarea { resize: vertical !important; min-height: 44px !important; }
+.log-edit-row textarea:focus,
+.log-edit-fields textarea:focus,
+.log-text-input:focus { border-color: var(--green) !important; outline: none !important; }
 
-/* Log edit form */
-.log-edit-row { display: flex !important; gap: 8px !important; align-items: center !important; margin-bottom: 8px !important; }
+/* Log edit form — label stacked above input */
+.log-edit-row { display: block !important; margin-bottom: 14px !important; }
 .log-edit-done { background: var(--green) !important; color: #fff !important; border: none !important; border-radius: 8px !important; padding: 8px 16px !important; font-family: 'DM Sans', system-ui, sans-serif !important; font-size: 0.82rem !important; font-weight: 600 !important; cursor: pointer !important; -webkit-appearance: none !important; }
 
 
@@ -2700,45 +2707,40 @@ input, select, textarea { font-size: 16px !important; }
               </button>
             </div>
 
-            <!-- Summary card -->
-            <div class="log-section-label">Ride details <span class="log-edit-hint">tap to edit</span></div>
-            <div class="log-summary-card" id="logSummaryCard">
-              <div class="log-summary-row" id="logSummaryDisplay"></div>
-              <div class="log-summary-edit hidden" id="logSummaryEdit">
-                <div class="log-edit-row">
-                  <label class="log-label">Distance</label>
-                  <div class="distance-input-wrap">
-                    <input type="number" id="logDistance" aria-label="Distance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1" />
-                    <div class="unit-toggle">
-                      <button class="unit-btn active" data-logunit="mi">mi</button>
-                      <button class="unit-btn" data-logunit="km">km</button>
-                    </div>
+            <!-- Ride details (shown inline — no tap-to-reveal) -->
+            <div class="log-section-label">Ride details</div>
+            <div class="log-edit-fields" id="logEditFields">
+              <div class="log-edit-row">
+                <label class="log-label" for="logDistance">Distance</label>
+                <div class="distance-input-wrap">
+                  <input type="number" id="logDistance" aria-label="Distance" placeholder="e.g. 25" min="0.1" max="999" inputmode="numeric" step="0.1" />
+                  <div class="unit-toggle">
+                    <button class="unit-btn active" data-logunit="mi">mi</button>
+                    <button class="unit-btn" data-logunit="km">km</button>
                   </div>
                 </div>
-                <div class="log-edit-row">
-                  <label class="log-label">Duration</label>
-                  <div class="distance-input-wrap">
-                    <input type="number" id="logDuration" aria-label="Duration in minutes" placeholder="e.g. 90" min="1" max="999" inputmode="numeric" />
-                    <div class="unit-toggle" style="border-left:1.5px solid var(--border)">
-                      <span class="unit-label">min</span>
-                    </div>
+              </div>
+              <div class="log-edit-row">
+                <label class="log-label" for="logDuration">Duration</label>
+                <div class="distance-input-wrap">
+                  <input type="number" id="logDuration" aria-label="Duration in minutes" placeholder="e.g. 90" min="1" max="999" inputmode="numeric" />
+                  <div class="unit-toggle" style="border-left:1.5px solid var(--border)">
+                    <span class="unit-label">min</span>
                   </div>
                 </div>
-                <div class="log-edit-row">
-                  <label class="log-label">Bike</label>
-                  <input type="text" id="logBike" aria-label="Bike name" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input" />
-                </div>
-                <div class="log-edit-row">
-                  <label class="log-label">Notes</label>
-                  <textarea id="logNotes" placeholder="Any notes about the ride…" rows="2"></textarea>
-                </div>
-                <button class="log-edit-done" id="logEditDone">Done ✓</button>
+              </div>
+              <div class="log-edit-row">
+                <label class="log-label" for="logBike">Bike</label>
+                <input type="text" id="logBike" aria-label="Bike name" placeholder="Which bike?" maxlength="40" autocomplete="off" class="log-text-input" />
+              </div>
+              <div class="log-edit-row">
+                <label class="log-label" for="logNotes">Notes</label>
+                <textarea id="logNotes" placeholder="Any notes about the ride…" rows="2"></textarea>
               </div>
             </div>
 
             <!-- Actions -->
             <div class="log-sheet-actions">
-              <button class="log-sheet-cancel-btn" id="logCancelBtn">Cancel</button>
               <button class="btn-primary log-save-btn" id="logSave">Log ride</button>
             </div>
           </div>
