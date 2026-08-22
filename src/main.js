@@ -3953,6 +3953,79 @@ function clearStrava() {
   updateStravaUI();
 }
 
+// activity:read_all also pulls in private / "Only You" rides, which most
+// cyclists want synced. Downgrade to 'activity:read' if you only want public.
+const STRAVA_SCOPE = 'activity:read_all';
+
+// Kick off the OAuth handshake: bounce the user to Strava's own login/consent
+// screen. The client_id is public, so we fetch it from the token function
+// rather than baking it into the bundle. We never see the user's password.
+async function beginStravaAuth() {
+  try {
+    const res = await fetch('/.netlify/functions/strava-token'); // GET → { client_id }
+    if (!res.ok) throw new Error('config');
+    const { client_id } = await res.json();
+    if (!client_id) throw new Error('config');
+
+    // Return the user to the app root; the boot-time callback handler picks it up.
+    const redirectUri = location.origin + location.pathname;
+    // CSRF guard: verify this same value comes back in the callback.
+    const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    sessionStorage.setItem('strava_oauth_state', state);
+
+    const url = 'https://www.strava.com/oauth/authorize'
+      + `?client_id=${encodeURIComponent(client_id)}`
+      + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+      + '&response_type=code'
+      + '&approval_prompt=auto'
+      + `&scope=${encodeURIComponent(STRAVA_SCOPE)}`
+      + `&state=${encodeURIComponent(state)}`;
+    location.href = url;
+  } catch (e) {
+    console.warn('Strava connect failed:', e);
+    showToast('Strava is not set up yet');
+  }
+}
+
+// Runs on every boot. If we came back from Strava with ?code=…, exchange it
+// for tokens, clean the URL, and auto-sync. No-op on a normal load.
+async function handleStravaCallback() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get('code');
+  const error = params.get('error');
+  const state = params.get('state');
+  if (!code && !error) return;
+
+  // Strip the OAuth params so a refresh doesn't re-trigger this.
+  const clean = () => history.replaceState(null, '', location.origin + location.pathname);
+
+  if (error) { clean(); showToast('Strava connection cancelled'); return; }
+
+  const expected = sessionStorage.getItem('strava_oauth_state');
+  sessionStorage.removeItem('strava_oauth_state');
+  if (expected && state !== expected) { clean(); showToast('Strava connect failed'); return; }
+
+  try {
+    const res = await fetch('/.netlify/functions/strava-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    if (!res.ok) throw new Error('exchange failed');
+    const tokens = await res.json();
+    if (!tokens.access_token) throw new Error('no token');
+    saveStravaTokens(tokens);
+    clean();
+    updateStravaUI();
+    showToast('Strava connected');
+    syncStrava(); // Auto-populate the log immediately.
+  } catch (e) {
+    console.warn('Strava code exchange failed:', e);
+    clean();
+    showToast('Strava connect failed');
+  }
+}
+
 async function refreshStravaToken() {
   const tokens = getStravaTokens();
   if (!tokens?.refresh_token) return null;
@@ -4126,24 +4199,13 @@ function setupStrava() {
         showToast('Strava disconnected');
       }
     } else {
-      // Prompt for tokens (manual paste for now)
-      const accessToken = prompt('Paste your Strava Access Token:');
-      if (!accessToken) return;
-      const refreshToken = prompt('Paste your Strava Refresh Token:');
-      if (!refreshToken) return;
-      const expiresAt = prompt('Token expires_at (or leave blank):', '');
-
-      saveStravaTokens({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        expires_at: expiresAt ? parseInt(expiresAt) : 0,
-      });
-      showToast('Strava connected');
-      updateStravaUI();
-      syncStrava(); // Auto-sync on connect
+      // Real OAuth: bounce to Strava's login/consent, come back via handleStravaCallback().
+      beginStravaAuth();
     }
   });
 
+  // If we just returned from Strava's consent screen, finish the handshake.
+  handleStravaCallback();
   updateStravaUI();
 }
 
