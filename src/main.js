@@ -4659,8 +4659,12 @@ function renderFoodTab() {
   appState._recoveryPlan = '';
   let smartTitle = '';
   let smartPicks = [];
+  // Whether these picks are pre-ride fuel or post-ride recovery — drives the
+  // timing label on each card so a recovery pick never reads "3-4 hrs before".
+  let smartContext = 'pre';
 
   if (recentRide) {
+    smartContext = 'post';
     const lastRide = log[0];
     const rideDist = lastRide.distanceMi ? Math.round(lastRide.distanceMi) : 0;
     const rideUnit = lastRide.distanceUnit || 'mi';
@@ -4705,9 +4709,11 @@ function renderFoodTab() {
   } else if (hour < 19) {
     smartTitle = '\u{1F37D}\uFE0F Post-ride? Refuel';
     smartPicks = ['Chicken breast','Rice bowl','Pasta','Chocolate milk','Sweet potato','Protein smoothie'];
+    smartContext = 'post';
   } else {
     smartTitle = '\u{1F319} Evening recovery';
     smartPicks = ['Cottage cheese','Greek yogurt','Berries','Dark chocolate','Tuna','Soup'];
+    smartContext = 'post';
   }
 
   if (isCold && !recentRide) {
@@ -4719,10 +4725,15 @@ function renderFoodTab() {
     const f = FOOD_DB.find(fd => fd.name === name);
     if (!f) return '';
     const color = f.score >= 75 ? 'var(--green)' : f.score >= 50 ? '#E9A01A' : '#C1121F';
+    // In a recovery context, show a post-ride label — never the pre-ride
+    // "hrs before" timing (foods like Pasta/Sweet potato are edible both ways).
+    const timingLabel = smartContext === 'post'
+      ? 'after ride'
+      : (f.preTiming || f.when.split(",")[0]);
     return '<button class="smart-pick" data-food="' + escHtml(f.name) + '" style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;cursor:pointer;-webkit-appearance:none;min-width:80px;font-family:inherit">' +
       '<span style="font-family:var(--font-data);font-weight:700;font-size:1rem;color:' + color + '">' + f.score + '</span>' +
       '<span style="font-size:0.78rem;font-weight:600;color:var(--text)">' + escHtml(f.name) + '</span>' +
-      '<span style="font-size:0.65rem;color:var(--text-faint)">' + (f.preTiming || f.when.split(",")[0]) + '</span>' +
+      '<span style="font-size:0.65rem;color:var(--text-faint)">' + timingLabel + '</span>' +
       '</button>';
   }).join('');
 
