@@ -4175,6 +4175,10 @@ function updateStravaUI() {
   const syncBtn = $('btnStravaSync');
   if (syncBtn) syncBtn.style.display = connected ? '' : 'none';
 
+  // Prominent Log-tab CTA: only surface it when there's something to do (connect).
+  const connectBanner = $('stravaConnectBanner');
+  if (connectBanner) connectBanner.style.display = connected ? 'none' : 'flex';
+
   const settingsBtn = $('stravaSettingsStatus');
   if (settingsBtn) {
     settingsBtn.textContent = connected ? 'Connected ✓' : 'Not connected';
@@ -4203,6 +4207,9 @@ function setupStrava() {
       beginStravaAuth();
     }
   });
+
+  // Prominent Connect CTA on the Log tab (only visible when not connected).
+  $('stravaConnectBanner')?.addEventListener('click', beginStravaAuth);
 
   // If we just returned from Strava's consent screen, finish the handshake.
   handleStravaCallback();
