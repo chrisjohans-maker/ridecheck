@@ -2604,6 +2604,19 @@ input, select, textarea { font-size: 16px !important; }
           </button>
           <button class="btn-strava-sync" id="btnStravaSync" style="display:none">🔄 Sync</button>
         </div>
+
+        <!-- Connect Strava CTA — shown only when not connected (toggled in updateStravaUI) -->
+        <button id="stravaConnectBanner" aria-label="Connect Strava to auto-import your rides" style="display:none;align-items:center;gap:14px;width:100%;text-align:left;margin-bottom:14px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-left:4px solid #FC4C02;border-radius:12px;cursor:pointer;-webkit-appearance:none;font-family:inherit">
+          <span style="flex:0 0 auto;width:40px;height:40px;border-radius:10px;background:#FC4C02;display:flex;align-items:center;justify-content:center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff" aria-hidden="true" focusable="false"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+          </span>
+          <span style="flex:1 1 auto">
+            <span style="display:block;font-weight:700;font-size:0.95rem;color:var(--text)">Connect Strava</span>
+            <span style="display:block;font-size:0.8rem;color:var(--text-muted);margin-top:2px">Auto-import your rides — no manual logging</span>
+          </span>
+          <span style="flex:0 0 auto;color:#FC4C02;font-weight:700;font-size:0.85rem">Connect &rarr;</span>
+        </button>
+
         <div id="logRecoveryCard" style="display:none"></div>
 
         <!-- Ride-log insights (trends + summary) -->
