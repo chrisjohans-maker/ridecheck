@@ -4115,14 +4115,17 @@ function stravaActivityToLogEntry(activity) {
   };
 }
 
-async function syncStrava() {
+// opts.silent = background auto-sync: no button state, no "nothing new" or
+// error toasts — only speaks up when new rides are actually added.
+async function syncStrava(opts = {}) {
+  const silent = opts.silent === true;
   const btn = $('btnStravaSync');
-  if (btn) { btn.textContent = 'Syncing…'; btn.disabled = true; }
+  if (btn && !silent) { btn.textContent = 'Syncing…'; btn.disabled = true; }
 
   try {
     const activities = await fetchStravaActivities(1, 30);
     if (!activities.length) {
-      showToast('No recent Strava rides found');
+      if (!silent) showToast('No recent Strava rides found');
       return;
     }
 
@@ -4132,7 +4135,7 @@ async function syncStrava() {
     );
 
     if (!rides.length) {
-      showToast('No cycling activities found');
+      if (!silent) showToast('No cycling activities found');
       return;
     }
 
@@ -4155,17 +4158,30 @@ async function syncStrava() {
       renderLogEntries();
       updateLogSubtitle();
       renderWeeklyGoal();
+      showToast(`${added} ride${added > 1 ? 's' : ''} synced from Strava`);
+      if (navigator.vibrate) navigator.vibrate(40);
+    } else if (!silent) {
+      showToast('Already up to date');
+      if (navigator.vibrate) navigator.vibrate(40);
     }
-
-    showToast(added > 0 ? `${added} ride${added > 1 ? 's' : ''} synced from Strava` : 'Already up to date');
-    if (navigator.vibrate) navigator.vibrate(40);
 
   } catch (e) {
     console.warn('Strava sync error:', e);
-    showToast('Strava sync failed');
+    if (!silent) showToast('Strava sync failed');
   } finally {
-    if (btn) { btn.textContent = '🔄 Sync Strava'; btn.disabled = false; }
+    if (btn && !silent) { btn.textContent = '🔄 Sync Strava'; btn.disabled = false; }
   }
+}
+
+// Background auto-sync on app open / foreground. Throttled to every 15 min so
+// we don't hammer Strava's API; the manual 🔄 button still force-syncs anytime.
+async function autoSyncStrava() {
+  if (!getStravaTokens()) return; // only when connected
+  const now = Date.now();
+  const last = parseInt(localStorage.getItem('ridecheck_strava_lastsync') || '0', 10);
+  if (now - last < 15 * 60 * 1000) return; // 15-min throttle
+  localStorage.setItem('ridecheck_strava_lastsync', String(now)); // stamp before await to avoid double-fire
+  syncStrava({ silent: true });
 }
 
 function updateStravaUI() {
@@ -4193,7 +4209,7 @@ function setupDebugStamp() {
 
 function setupStrava() {
   // Sync button on Log tab
-  $('btnStravaSync')?.addEventListener('click', syncStrava);
+  $('btnStravaSync')?.addEventListener('click', () => syncStrava()); // no arg: the click event must not become opts
 
   // Connect button in Settings
   $('stravaConnect')?.addEventListener('click', () => {
@@ -4251,8 +4267,9 @@ init();
 
 // Check for a newer deploy shortly after load and whenever the app regains focus.
 setTimeout(checkForUpdate, 4000);
+setTimeout(autoSyncStrava, 3000); // background Strava refresh shortly after open
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForUpdate();
+  if (document.visibilityState === 'visible') { checkForUpdate(); autoSyncStrava(); }
 });
 
 // ─── CONFIDENCE ───────────────────────────────────────────────
