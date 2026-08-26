@@ -1286,6 +1286,29 @@ body.dark .trail-status-bad { color: var(--amber); }
 
 .log-filter.active { background: var(--green); border-color: var(--green); color: #fff; }
 
+/* ── Time nav: year dropdown + month chips ── */
+.log-time-nav { margin-bottom: 12px; }
+
+.log-year-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+
+.log-year-label {
+  font-family: var(--font-body); font-size: 0.78rem; font-weight: 600;
+  color: var(--text-muted);
+}
+
+.log-year-select {
+  font-family: var(--font-body); font-size: 0.82rem; font-weight: 700;
+  color: var(--text); background: var(--surface);
+  border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 6px 10px; min-height: 34px; cursor: pointer;
+}
+
+.log-month-bar {
+  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px;
+  scrollbar-width: none; touch-action: pan-x pan-y; overscroll-behavior-x: contain;
+}
+.log-month-bar::-webkit-scrollbar { display: none; }
+
 
 /* ── Settings modal (bottom sheet) ── */
 .settings-overlay {
@@ -2627,6 +2650,8 @@ input, select, textarea { font-size: 16px !important; }
         
 
         <!-- Ride entries -->
+        <div class="log-time-nav" id="logTimeNav" style="display:none"></div>
+
         <div class="log-filter-bar" id="logFilterBar">
           <button class="log-filter active" data-filter="all">All</button>
           <button class="log-filter" data-filter="road">🚴 Road</button>

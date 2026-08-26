@@ -2366,16 +2366,22 @@ function renderLogEntries() {
   if (!el) return;
   const allLog = getRideLog();
 
-  // Apply filter
-  const log = activeLogFilter === 'all' ? allLog : allLog.filter(e => {
-    if (['road','gravel','mtb','commute'].includes(activeLogFilter)) return e.rideType === activeLogFilter;
-    if (['great','good','tough','bad'].includes(activeLogFilter)) return e.feel === activeLogFilter;
+  // Refresh the year/month nav from current data (also seeds the default year).
+  renderLogTimeNav(allLog);
+
+  // Apply filters: type/feel (chip bar) AND year/month (time nav) combine.
+  const log = allLog.filter(e => {
+    if (['road','gravel','mtb','commute'].includes(activeLogFilter) && e.rideType !== activeLogFilter) return false;
+    if (['great','good','tough','bad'].includes(activeLogFilter) && e.feel !== activeLogFilter) return false;
+    const d = new Date(e.date);
+    if (activeLogYear !== 'all' && activeLogYear !== null && d.getFullYear() !== activeLogYear) return false;
+    if (activeLogMonth !== 'all' && d.getMonth() !== activeLogMonth) return false;
     return true;
   });
 
   if (!log.length) {
     el.innerHTML = allLog.length
-      ? `<div class="empty-state">No ${activeLogFilter} rides logged yet.</div>`
+      ? `<div class="empty-state">No rides match this filter.</div>`
       : '<div class="log-empty-state"><div class="log-empty-icon">🚴</div><div class="log-empty-title">Ready for your first ride?</div><div class="log-empty-sub">Tap "Log ride" after your next session to start tracking your history.</div></div>';
     return;
   }
@@ -2390,7 +2396,14 @@ function renderLogEntries() {
   const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(now.getDate() - 14);
   const monthAgo = new Date(now); monthAgo.setMonth(now.getMonth() - 1);
 
+  // A single month is selected → the list is already one month; no headers.
+  const singleMonth = activeLogYear !== 'all' && activeLogYear !== null && activeLogMonth !== 'all';
+  // A specific year (all months) → group by month name alone; the year is implied.
+  const yearScoped = activeLogYear !== 'all' && activeLogYear !== null && activeLogMonth === 'all';
+
   function getGroup(date) {
+    if (singleMonth) return '';
+    if (yearScoped) return date.toLocaleDateString([], { month: 'long' });
     // Compare using local date only (strip time)
     const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const t = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -2836,14 +2849,84 @@ function showToast(msg) {
 
 // ─── LOG FILTER ───────────────────────────────────────────────
 let activeLogFilter = 'all';
+// Time filter. activeLogYear: null = uninitialized (defaults to the latest year
+// with rides), a 4-digit number, or 'all'. activeLogMonth: 0–11 or 'all'.
+let activeLogYear = null;
+let activeLogMonth = 'all';
+
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Build the year dropdown + month chips from the log's actual dates. Years and
+// months with no rides never appear, so there are no dead taps. Called from
+// renderLogEntries so the nav always tracks the current data.
+function renderLogTimeNav(allLog) {
+  const nav = $('logTimeNav');
+  if (!nav) return;
+
+  const years = [...new Set(allLog.map(e => new Date(e.date).getFullYear()))]
+    .filter(y => !isNaN(y)).sort((a, b) => b - a);
+
+  if (!years.length) { nav.style.display = 'none'; return; }
+  nav.style.display = '';
+
+  // Default to the most recent year on first render; heal a stale selection.
+  if (activeLogYear === null) activeLogYear = years[0];
+  if (activeLogYear !== 'all' && !years.includes(activeLogYear)) {
+    activeLogYear = years[0]; activeLogMonth = 'all';
+  }
+
+  // Months present in the selected year (only when a specific year is chosen).
+  let months = [];
+  if (activeLogYear !== 'all') {
+    months = [...new Set(allLog
+      .filter(e => new Date(e.date).getFullYear() === activeLogYear)
+      .map(e => new Date(e.date).getMonth()))]
+      .filter(m => !isNaN(m)).sort((a, b) => a - b);
+    if (activeLogMonth !== 'all' && !months.includes(activeLogMonth)) activeLogMonth = 'all';
+  } else {
+    activeLogMonth = 'all';
+  }
+
+  const yearOpts = [`<option value="all"${activeLogYear === 'all' ? ' selected' : ''}>All years</option>`]
+    .concat(years.map(y => `<option value="${y}"${y === activeLogYear ? ' selected' : ''}>${y}</option>`))
+    .join('');
+
+  const monthChips = months.length
+    ? `<div class="log-month-bar" id="logMonthBar">`
+      + `<button class="log-filter log-month${activeLogMonth === 'all' ? ' active' : ''}" data-month="all">All months</button>`
+      + months.map(m => `<button class="log-filter log-month${m === activeLogMonth ? ' active' : ''}" data-month="${m}">${MONTH_SHORT[m]}</button>`).join('')
+      + `</div>`
+    : '';
+
+  nav.innerHTML = `<div class="log-year-row">`
+    + `<label class="log-year-label" for="logYearSelect">Year</label>`
+    + `<select class="log-year-select" id="logYearSelect" aria-label="Filter rides by year">${yearOpts}</select>`
+    + `</div>${monthChips}`;
+}
 
 function setupLogFilter() {
   $('logFilterBar')?.addEventListener('click', e => {
     const btn = e.target.closest('.log-filter');
     if (!btn) return;
     activeLogFilter = btn.dataset.filter;
-    document.querySelectorAll('.log-filter').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#logFilterBar .log-filter').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    renderLogEntries();
+  });
+
+  // Year dropdown (delegated — the <select> is re-rendered each pass).
+  $('logTimeNav')?.addEventListener('change', e => {
+    if (e.target.id !== 'logYearSelect') return;
+    activeLogYear = e.target.value === 'all' ? 'all' : parseInt(e.target.value, 10);
+    activeLogMonth = 'all'; // reset month when the year changes
+    renderLogEntries();
+  });
+
+  // Month chips (delegated).
+  $('logTimeNav')?.addEventListener('click', e => {
+    const btn = e.target.closest('.log-month');
+    if (!btn) return;
+    activeLogMonth = btn.dataset.month === 'all' ? 'all' : parseInt(btn.dataset.month, 10);
     renderLogEntries();
   });
 }
