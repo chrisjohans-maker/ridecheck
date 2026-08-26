@@ -4061,7 +4061,8 @@ async function getStravaAccessToken() {
   return refreshStravaToken();
 }
 
-async function fetchStravaActivities(page = 1, perPage = 30) {
+// Fetch a single page of activities. Handles one 401 refresh-and-retry.
+async function fetchStravaActivities(page = 1, perPage = 200) {
   const token = await getStravaAccessToken();
   if (!token) { showToast('Strava not connected'); return []; }
 
@@ -4087,6 +4088,21 @@ async function fetchStravaActivities(page = 1, perPage = 30) {
     console.warn('Strava fetch error:', e);
     return [];
   }
+}
+
+// Walk every page of the athlete's history, newest-first, until a short page
+// signals the end. per_page=200 is Strava's max; maxPages caps runaway loops
+// (200 × 25 = 5,000 activities — years of riding) so a huge history can't hang
+// the app or hammer the API.
+async function fetchAllStravaActivities(perPage = 200, maxPages = 25) {
+  const all = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const batch = await fetchStravaActivities(page, perPage);
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < perPage) break; // last page reached
+  }
+  return all;
 }
 
 function stravaActivityToLogEntry(activity) {
@@ -4123,7 +4139,13 @@ async function syncStrava(opts = {}) {
   if (btn && !silent) { btn.textContent = 'Syncing…'; btn.disabled = true; }
 
   try {
-    const activities = await fetchStravaActivities(1, 30);
+    // Full history on manual sync or the first-ever sync (nothing imported yet);
+    // background auto-syncs just grab the most recent page to catch new rides.
+    const log = getRideLog();
+    const hasImported = log.some(e => e.stravaId);
+    const activities = (silent && hasImported)
+      ? await fetchStravaActivities(1, 200)
+      : await fetchAllStravaActivities();
     if (!activities.length) {
       if (!silent) showToast('No recent Strava rides found');
       return;
@@ -4140,7 +4162,6 @@ async function syncStrava(opts = {}) {
     }
 
     // Convert and merge, avoiding duplicates
-    const log = getRideLog();
     const existingStravaIds = new Set(log.filter(e => e.stravaId).map(e => e.stravaId));
     let added = 0;
 
