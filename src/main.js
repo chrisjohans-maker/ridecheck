@@ -2868,6 +2868,7 @@ function renderLogTimeNav(allLog) {
 
   if (!years.length) { nav.style.display = 'none'; return; }
   nav.style.display = '';
+  nav.style.marginBottom = '16px'; // separate the time nav from the type/feel bar
 
   // Default to the most recent year on first render; heal a stale selection.
   if (activeLogYear === null) activeLogYear = years[0];
@@ -2891,16 +2892,33 @@ function renderLogTimeNav(allLog) {
     .concat(years.map(y => `<option value="${y}"${y === activeLogYear ? ' selected' : ''}>${y}</option>`))
     .join('');
 
+  // Inline styles: rules in the main <style> block don't reliably apply to this
+  // late-injected markup, and inline styling matches how the rest of this file
+  // styles JS-rendered controls. Month chips reuse the .log-filter chip classes.
+  const rowStyle = 'display:flex;align-items:center;gap:10px;margin-bottom:12px;';
+  const labelStyle = 'flex:0 0 auto;font-family:var(--font-body);font-size:0.78rem;font-weight:600;color:var(--text-muted);';
+  const wrapStyle = 'position:relative;display:inline-flex;align-items:center;';
+  const selStyle = '-webkit-appearance:none;appearance:none;font-family:var(--font-body);'
+    + 'font-size:0.82rem;font-weight:700;color:var(--text);background:var(--surface);line-height:1;'
+    + 'border:1.5px solid var(--border);border-radius:20px;padding:7px 32px 7px 14px;min-height:34px;cursor:pointer;';
+  const chevStyle = 'position:absolute;right:13px;top:50%;transform:translateY(-50%);'
+    + 'pointer-events:none;color:var(--text-muted);font-size:0.66rem;';
+  const barStyle = 'display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;'
+    + 'scrollbar-width:none;-webkit-overflow-scrolling:touch;';
+
   const monthChips = months.length
-    ? `<div class="log-month-bar" id="logMonthBar">`
+    ? `<div class="log-month-bar" id="logMonthBar" style="${barStyle}">`
       + `<button class="log-filter log-month${activeLogMonth === 'all' ? ' active' : ''}" data-month="all">All months</button>`
       + months.map(m => `<button class="log-filter log-month${m === activeLogMonth ? ' active' : ''}" data-month="${m}">${MONTH_SHORT[m]}</button>`).join('')
       + `</div>`
     : '';
 
-  nav.innerHTML = `<div class="log-year-row">`
-    + `<label class="log-year-label" for="logYearSelect">Year</label>`
-    + `<select class="log-year-select" id="logYearSelect" aria-label="Filter rides by year">${yearOpts}</select>`
+  nav.innerHTML = `<div class="log-year-row" style="${rowStyle}">`
+    + `<label class="log-year-label" for="logYearSelect" style="${labelStyle}">Year</label>`
+    + `<span class="log-year-select-wrap" style="${wrapStyle}">`
+    + `<select class="log-year-select" id="logYearSelect" aria-label="Filter rides by year" style="${selStyle}">${yearOpts}</select>`
+    + `<span aria-hidden="true" style="${chevStyle}">▾</span>`
+    + `</span>`
     + `</div>${monthChips}`;
 }
 
