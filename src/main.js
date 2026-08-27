@@ -2368,6 +2368,8 @@ function renderLogEntries() {
 
   // Refresh the year/month nav from current data (also seeds the default year).
   renderLogTimeNav(allLog);
+  // Keep Insights in lockstep with the active filter (it reads activeLogYear/Month).
+  renderLogInsights();
 
   // Apply filters: type/feel (chip bar) AND year/month (time nav) combine.
   const log = allLog.filter(e => {
@@ -2531,8 +2533,14 @@ function renderLogInsights() {
   const el = $('logInsights');
   if (!el) return;
   const log = getRideLog();
-  const ins = computeInsights(log);
+  const fYear = (activeLogYear === null || activeLogYear === 'all') ? 'all' : activeLogYear;
+  const fMonth = activeLogMonth;
+  const ins = computeInsights(log, new Date(), { year: fYear, month: fMonth });
   if (!ins.totalRides) { el.setAttribute('style', 'display:none'); return; }
+
+  const scopeLabel = fYear === 'all'
+    ? 'All time'
+    : (fMonth === 'all' ? `${fYear}` : `${MONTH_SHORT[fMonth]} ${fYear}`);
 
   const km = appState.unit === 'km';
   const conv = mi => km ? mi * 1.60934 : mi;
@@ -2552,32 +2560,45 @@ function renderLogInsights() {
     </div>`
   ).join('');
 
-  // ── Monthly distance — labeled bars (value on top, month below), current month emphasized ──
+  // ── Monthly distance — labeled bars, current month emphasized. A specific year
+  // renders all 12 months in a denser "year in review" style: single-letter labels
+  // and no per-bar numbers (they'd collide in 12 narrow columns; the value lives in
+  // the header + tap tooltip). The rolling all-time view keeps its richer numbered bars.
+  const dense = ins.scoped;
   const HUE = '#5AA0E0';
   const TRACK = 56; // px height of the bar track
+  const barMax = dense ? 16 : 26;
+  const gap = dense ? 3 : 6;
   const maxMi = Math.max(...ins.months.map(m => m.mi), 0);
   let chart = '';
   if (maxMi > 0) {
     const bars = ins.months.map(m => {
-      const barPx = m.mi > 0 ? Math.max(4, Math.round((m.mi / maxMi) * TRACK)) : 0;
+      const barPx = m.mi > 0 ? Math.max(dense ? 3 : 4, Math.round((m.mi / maxMi) * TRACK)) : 0;
       const valBar = m.mi > 0
-        ? `<div style="position:relative;width:100%;max-width:26px;height:${barPx}px;background:${HUE};opacity:${m.isCurrent ? 1 : 0.55};border-radius:4px 4px 0 0;"></div>`
+        ? `<div style="position:relative;width:100%;max-width:${barMax}px;height:${barPx}px;background:${HUE};opacity:${m.isCurrent ? 1 : 0.55};border-radius:4px 4px 0 0;"></div>`
         : '';
+      const topNum = dense ? '' :
+        `<div style="font-size:0.62rem;font-weight:600;color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};height:12px;">${m.mi > 0 ? num(conv(m.mi)) : ''}</div>`;
+      const label = dense ? m.label.charAt(0) : m.label;
       return `<div title="${escHtml(m.label + ': ' + num(conv(m.mi)) + ' ' + uLabel)}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;">
-        <div style="font-size:0.62rem;font-weight:600;color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};height:12px;">${m.mi > 0 ? num(conv(m.mi)) : ''}</div>
+        ${topNum}
         <div style="position:relative;width:100%;height:${TRACK}px;display:flex;justify-content:center;align-items:flex-end;">
-          <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:26px;height:${TRACK}px;background:var(--border);opacity:0.35;border-radius:4px;"></div>
+          <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:${barMax}px;height:${TRACK}px;background:var(--border);opacity:0.35;border-radius:4px;"></div>
           ${valBar}
         </div>
-        <div style="font-size:0.64rem;color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};font-weight:${m.isCurrent ? 700 : 400};">${escHtml(m.label)}</div>
+        <div style="font-size:${dense ? '0.6rem' : '0.64rem'};color:${m.isCurrent ? 'var(--text)' : 'var(--text-faint)'};font-weight:${m.isCurrent ? 700 : 400};">${escHtml(label)}</div>
       </div>`;
     }).join('');
+    const yearTotalMi = ins.months.reduce((s, m) => s + m.mi, 0);
+    const headerRight = dense
+      ? `<span style="font-size:0.66rem;color:var(--text-faint);">${fYear} total <span style="color:var(--text);font-weight:700;">${num(conv(yearTotalMi))} ${uLabel}</span></span>`
+      : `<span style="font-size:0.66rem;color:var(--text-faint);">this month <span style="color:var(--text);font-weight:700;">${num(conv(ins.thisMonthMi))} ${uLabel}</span></span>`;
     chart = `<div style="margin-top:14px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
         <span style="font-size:0.72rem;font-weight:600;color:var(--text-muted);">Monthly distance</span>
-        <span style="font-size:0.66rem;color:var(--text-faint);">this month <span style="color:var(--text);font-weight:700;">${num(conv(ins.thisMonthMi))} ${uLabel}</span></span>
+        ${headerRight}
       </div>
-      <div style="display:flex;align-items:flex-end;gap:6px;">${bars}</div>
+      <div style="display:flex;align-items:flex-end;gap:${gap}px;">${bars}</div>
     </div>`;
   }
 
@@ -2591,7 +2612,10 @@ function renderLogInsights() {
 
   el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:12px;');
   el.innerHTML = `
-    <div style="font-size:0.8rem;font-weight:700;color:var(--text);margin-bottom:10px;">Insights</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+      <span style="font-size:0.8rem;font-weight:700;color:var(--text);">Insights</span>
+      <span style="font-size:0.7rem;font-weight:600;color:var(--text-faint);">${escHtml(scopeLabel)}</span>
+    </div>
     <div style="display:flex;gap:8px;">${tiles}</div>
     ${chart}
     ${feel}
