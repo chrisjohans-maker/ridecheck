@@ -85,6 +85,58 @@ describe('computeInsights', () => {
     expect(r.months[1].mi).toBe(0); // July gap preserved
   });
 
+  it('defaults to the all-time view (scoped=false, rolling months)', () => {
+    const log = [{ date: daysAgo(0), distanceMi: 20 }];
+    const r = computeInsights(log, now);
+    expect(r.scoped).toBe(false);
+    expect(r.months.length).toBeLessThanOrEqual(6);
+  });
+
+  describe('year/month scoping', () => {
+    const log = [
+      { date: '2022-03-10T09:00:00', distanceMi: 30, feel: 'good' },  // Mar 2022
+      { date: '2022-03-20T09:00:00', distanceMi: 20, feel: 'great' }, // Mar 2022
+      { date: '2022-08-05T09:00:00', distanceMi: 50, feel: 'tough' }, // Aug 2022
+      { date: daysAgo(0), distanceMi: 999, feel: 'bad' },             // Aug 2026 (current)
+    ];
+
+    it('scopes the tiles + feel to the selected year', () => {
+      const r = computeInsights(log, now, { year: 2022 });
+      expect(r.scoped).toBe(true);
+      expect(r.totalRides).toBe(3);        // the 2026 ride is excluded
+      expect(r.totalMi).toBe(100);         // 30 + 20 + 50
+      expect(r.longestMi).toBe(50);
+      expect(r.byFeel).toEqual({ great: 1, good: 1, tough: 1, bad: 0 });
+    });
+
+    it('renders all 12 calendar months of the selected year', () => {
+      const r = computeInsights(log, now, { year: 2022 });
+      expect(r.months).toHaveLength(12);
+      expect(r.months.map(m => m.label)).toEqual(
+        ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']);
+      expect(r.months[2].mi).toBe(50);  // Mar 2022 total
+      expect(r.months[7].mi).toBe(50);  // Aug 2022
+      expect(r.months[0].mi).toBe(0);   // Jan gap kept
+      // A past year has no "current" month highlighted.
+      expect(r.months.every(m => !m.isCurrent)).toBe(true);
+    });
+
+    it('scopes tiles to a single month but still charts the whole year', () => {
+      const r = computeInsights(log, now, { year: 2022, month: 2 }); // March
+      expect(r.totalRides).toBe(2);       // only the two March rides
+      expect(r.totalMi).toBe(50);
+      expect(r.months).toHaveLength(12);  // chart is still the full year
+      expect(r.months[2].isCurrent).toBe(true);  // selected month emphasized
+      expect(r.months[7].isCurrent).toBe(false);
+    });
+
+    it('flags the actual current month when viewing the current year', () => {
+      const r = computeInsights(log, now, { year: 2026 }); // now = Aug 2026
+      expect(r.months[7].isCurrent).toBe(true);   // Aug
+      expect(r.months[7].mi).toBe(999);
+    });
+  });
+
   it('counts rides by feel', () => {
     const log = [
       { date: daysAgo(1), feel: 'good' },
