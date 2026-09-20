@@ -1574,6 +1574,8 @@ function renderGear() {
 // ─── GEAR LOGIC ENGINE ────────────────────────────────────────
 
 function buildGearList(current, hourly, rideType, duration, bikeType) {
+  if (rideType === 'stationary' || bikeType === 'stationary') return buildIndoorGearList(duration);
+
   const gear = [];
   const fl    = current.apparent_temperature ?? current.temperature_2m ?? 65;
   const wind  = current.wind_speed_10m ?? 0;
@@ -1707,6 +1709,33 @@ function buildGearList(current, hourly, rideType, duration, bikeType) {
   if (rideType === 'road' && duration !== 'short') {
     gear.push({ icon:'🧰', cat:'Road essentials', name:'Saddle bag: tube, CO₂, tyre levers', reason:'Road tyres flat without warning — be self-sufficient' });
   }
+
+  return gear;
+}
+
+// Indoor/stationary rides skip weather entirely — no wind, sun, rain, or
+// road hazards. The dominant factor indoors is the lack of airflow, which
+// drives sweat rate and fluid needs far higher than an equivalent outdoor ride.
+function buildIndoorGearList(duration) {
+  const gear = [];
+  const isLong = duration === 'long' || duration === 'epic';
+  const isMed  = duration === 'medium';
+
+  gear.push({ icon:'🌀', cat:'Indoor setup', name:'High-volume fan (or two)', reason:'No airflow indoors — without a fan, sweat rate and core temp run much higher than outdoors at the same effort' });
+  gear.push({ icon:'🧺', cat:'Indoor setup', name:'Sweat towel + trainer mat', reason:'Indoor sweat volume drips straight onto the frame and floor — protect both' });
+  gear.push({ icon:'👕', cat:'Clothing', name:'Lightweight bib shorts + breathable/mesh jersey', reason:'Dress cooler than you would outside — there’s no wind to help you shed heat' });
+  gear.push({ icon:'🧴', cat:'Clothing', name:'Chamois cream', reason:'Longer time in the saddle with no coasting or terrain breaks increases friction' });
+
+  if (duration === 'short') {
+    gear.push({ icon:'💧', cat:'Hydration & fuel', name:'1–2 bottles + electrolyte mix', reason:'Indoor sweat rate is high even for a short session — start with electrolytes, not just water' });
+  } else {
+    gear.push({ icon:'💧', cat:'Hydration & fuel', name:'2+ bottles or a jug within reach + electrolyte tabs', reason:'No evaporative cooling indoors means significantly higher fluid and sodium loss than the same ride outside' });
+  }
+  if (isMed)  gear.push({ icon:'⚡', cat:'Hydration & fuel', name:'1–2 gels or bars', reason:'Fuel at 45–60 min to avoid the bonk, same as outdoors' });
+  else if (isLong) gear.push({ icon:'🥙', cat:'Hydration & fuel', name:'Gels/bars + real food within reach', reason:'Long indoor session — fuel every 30–45 min since there’s no coasting to recover on' });
+
+  gear.push({ icon:'🔧', cat:'Pre-ride checks', name:'Trainer calibration / spin-down (or tyre pressure if wheel-on)', reason:'Indoor setups drift out of calibration — a quick spin-down keeps power and resistance accurate' });
+  gear.push({ icon:'📺', cat:'Indoor setup', name:'Zwift / TrainerRoad / entertainment queued up', reason:'Indoor sessions live and die on distraction — queue it before you clip in' });
 
   return gear;
 }
@@ -1957,7 +1986,7 @@ function renderProfileChips() {
   }
   row.style.display = '';
 
-  const bikeIcon = (type) => ({road:'\u{1F6B4}',gravel:'\u{1FAA8}',mtb:'\u{1F33F}',commuter:'\u{1F3D9}','e-bike':'\u26A1'}[type] || '\u{1F6B4}');
+  const bikeIcon = (type) => ({road:'\u{1F6B4}',gravel:'\u{1FAA8}',mtb:'\u{1F33F}',commuter:'\u{1F3D9}','e-bike':'\u26A1',stationary:'\u{1F3E0}'}[type] || '\u{1F6B4}');
   row.innerHTML = `
     <div class="log-setups-label">Saved setups</div>
     <div class="prep-setups-scroll">
@@ -2373,7 +2402,7 @@ function renderLogEntries() {
 
   // Apply filters: type/feel (chip bar) AND year/month (time nav) combine.
   const log = allLog.filter(e => {
-    if (['road','gravel','mtb','commute'].includes(activeLogFilter) && e.rideType !== activeLogFilter) return false;
+    if (['road','gravel','mtb','commute','stationary'].includes(activeLogFilter) && e.rideType !== activeLogFilter) return false;
     if (['great','good','tough','bad'].includes(activeLogFilter) && e.feel !== activeLogFilter) return false;
     const d = new Date(e.date);
     if (activeLogYear !== 'all' && activeLogYear !== null && d.getFullYear() !== activeLogYear) return false;
@@ -3208,7 +3237,7 @@ function setupWeightInterstitial() {
 
 // Map bike type to ride type for gear/fueling logic
 function bikeTypeToRideType(bikeType) {
-  const map = { road:'road', gravel:'gravel', mtb:'mtb', commuter:'commute', ebike:'commute' };
+  const map = { road:'road', gravel:'gravel', mtb:'mtb', commuter:'commute', ebike:'commute', stationary:'stationary' };
   return map[bikeType] || 'road';
 }
 
@@ -3437,7 +3466,7 @@ function renderLogSetups() {
   }
 
   row.style.display = '';
-  const bikeIcon = (type) => ({road:'\u{1F6B4}',gravel:'\u{1FAA8}',mtb:'\u{1F33F}',commuter:'\u{1F3D9}','e-bike':'\u26A1'}[type] || '\u{1F6B4}');
+  const bikeIcon = (type) => ({road:'\u{1F6B4}',gravel:'\u{1FAA8}',mtb:'\u{1F33F}',commuter:'\u{1F3D9}','e-bike':'\u26A1',stationary:'\u{1F3E0}'}[type] || '\u{1F6B4}');
   row.innerHTML = `
     <div class="log-setups-label">Quick fill</div>
     <div class="log-setups-chips">
@@ -4247,7 +4276,7 @@ function stravaActivityToLogEntry(activity) {
     durationMins: durationMins,
     feel: null, // User can edit later
     bike: activity.gear_id ? null : null,
-    rideType: activity.type === 'Ride' ? 'road' : activity.type === 'MountainBikeRide' ? 'mtb' : activity.type === 'GravelRide' ? 'gravel' : 'road',
+    rideType: activity.type === 'Ride' ? 'road' : activity.type === 'MountainBikeRide' ? 'mtb' : activity.type === 'GravelRide' ? 'gravel' : activity.type === 'VirtualRide' ? 'stationary' : 'road',
     notes: activity.name || null,
     location: null,
     weatherIcon: '🔄',

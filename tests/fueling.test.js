@@ -30,6 +30,14 @@ describe('buildNutritionPlan — recovery hydration', () => {
     expect(ebike.caloriesBurned / road.caloriesBurned).toBeCloseTo(0.55, 2);
     expect(ebike.carbsG).toBeLessThan(road.carbsG);
   });
+
+  it('treats stationary rides as high-sweat regardless of outdoor temp', () => {
+    const coldWeather = { apparent_temperature: 35, relative_humidity_2m: 50 };
+    const indoor = buildNutritionPlan(coldWeather, 20, 'stationary', 70, 'moderate', 'stationary', 0);
+    const outdoor = buildNutritionPlan(coldWeather, 20, 'road', 70, 'moderate', 'road', 0);
+    expect(indoor.isCold).toBe(false);
+    expect(indoor.sweatLossMl).toBeGreaterThan(outdoor.sweatLossMl);
+  });
 });
 
 describe('buildFuelingPlan', () => {
@@ -40,5 +48,14 @@ describe('buildFuelingPlan', () => {
   });
   it('returns null when no distance', () => {
     expect(buildFuelingPlan(current, 0, 'road', 70, 'moderate', 'road', 0)).toBeNull();
+  });
+
+  // Stationary/indoor rides ignore outdoor temperature and always assume a
+  // high sweat rate — no airflow means no evaporative cooling.
+  it('treats stationary rides as high-sweat regardless of outdoor temp', () => {
+    const coldWeather = { apparent_temperature: 35, relative_humidity_2m: 50 };
+    const outdoorCold = buildFuelingPlan(coldWeather, 20, 'road', 70, 'moderate', 'road', 0);
+    const indoorCold  = buildFuelingPlan(coldWeather, 20, 'stationary', 70, 'moderate', 'stationary', 0);
+    expect(indoorCold.waterMl).toBeGreaterThan(outdoorCold.waterMl);
   });
 });

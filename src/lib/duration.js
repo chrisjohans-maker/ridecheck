@@ -1,9 +1,9 @@
 // Duration + elevation multipliers (pure; take elevationM explicitly).
 export function estimateDuration(distanceMi, rideType, elevationM = 0) {
   if (!distanceMi) return null;
-  // avg speeds mph: road 16, gravel 13, mtb 10, commute 12
+  // avg speeds mph: road 16, gravel 13, mtb 10, commute 12, stationary 14
   // Reduce speed at high elevation (>1500m): thinner air, likely hillier terrain
-  const speeds = { road:16, gravel:13, mtb:10, commute:12 };
+  const speeds = { road:16, gravel:13, mtb:10, commute:12, stationary:14 };
   let speed = speeds[rideType] || 14;
   const elev = elevationM || 0;
   if (elev > 2500) speed *= 0.8;

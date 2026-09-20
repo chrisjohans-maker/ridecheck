@@ -4,17 +4,21 @@ import { estimateDuration, elevationCalorieMult, elevationHydrationMult } from '
 export function buildFuelingPlan(current, distanceMi, rideType, weightKg, intensity, bikeType, elevationM = 0) {
   if (!distanceMi) return null;
 
+  const isIndoor = rideType === 'stationary';
   const fl      = current.apparent_temperature;
   const humid   = current.relative_humidity_2m;
-  const isHot   = fl > 82;
-  const isWarm  = fl > 68;
-  const isCold  = fl < 45;
+  const isHot   = isIndoor ? true : fl > 82;
+  const isWarm  = isIndoor ? true : fl > 68;
+  const isCold  = isIndoor ? false : fl < 45;
   const durationMins = estimateDuration(distanceMi, rideType, elevationM);
   const hrs     = durationMins / 60;
   const intensityMult = intensity === 'easy' ? 0.75 : intensity === 'hard' ? 1.3 : 1.0;
 
+  // No airflow indoors means no evaporative cooling — sweat rate runs well above
+  // an equivalent outdoor effort, so bump the baseline before the usual scaling.
+  const indoorSweatMult = isIndoor ? 1.4 : 1.0;
   // Sweat rate ml/hr
-  const sweatRate = Math.round((isHot ? 1050 : isWarm ? 800 : humid > 75 ? 700 : 500) * (weightKg / 70) * intensityMult * elevationHydrationMult(elevationM));
+  const sweatRate = Math.round((isHot ? 1050 : isWarm ? 800 : humid > 75 ? 700 : 500) * (weightKg / 70) * intensityMult * elevationHydrationMult(elevationM) * indoorSweatMult);
   const totalSweatMl = Math.round(sweatRate * hrs);
 
   // Water needs: replace 80% of sweat loss (can\u0027t fully replace during effort)
@@ -107,22 +111,25 @@ export function buildFuelingPlan(current, distanceMi, rideType, weightKg, intens
 }
 
 export function buildNutritionPlan(current, distanceMi, rideType, weightKg, intensity, bikeType, elevationM = 0) {
+  const isIndoor = rideType === 'stationary';
   const fl     = current.apparent_temperature;
   const humid  = current.relative_humidity_2m;
-  const isHot  = fl > 82;
-  const isWarm = fl > 68;
-  const isCold = fl < 45;
+  const isHot  = isIndoor ? true : fl > 82;
+  const isWarm = isIndoor ? true : fl > 68;
+  const isCold = isIndoor ? false : fl < 45;
 
   const durationMins = distanceMi ? estimateDuration(distanceMi, rideType, elevationM) : 60;
   const hrs = durationMins / 60;
-  const metValues = { road:8.0, gravel:7.5, mtb:8.5, commute:5.5 };
+  const metValues = { road:8.0, gravel:7.5, mtb:8.5, commute:5.5, stationary:8.0 };
   const intensityMult = intensity === 'easy' ? 0.78 : intensity === 'hard' ? 1.25 : 1.0;
   const met = (metValues[rideType] || 7) * intensityMult;
   const ebikeAdj = bikeType === 'ebike' ? 0.55 : 1.0; // assisted effort burns/uses ~half
+  // No airflow indoors — same sweat-rate bump as buildFuelingPlan.
+  const indoorSweatMult = isIndoor ? 1.4 : 1.0;
 
   const caloriesBurned = Math.round(met * weightKg * hrs * elevationCalorieMult(elevationM) * ebikeAdj);
   // Scale sweat by rider weight and intensity to match buildFuelingPlan (was fixed at ~70kg/moderate)
-  const sweatRatePerHour = Math.round((isHot ? 1050 : isWarm ? 750 : humid > 75 ? 700 : 500) * (weightKg / 70) * intensityMult * elevationHydrationMult(elevationM));
+  const sweatRatePerHour = Math.round((isHot ? 1050 : isWarm ? 750 : humid > 75 ? 700 : 500) * (weightKg / 70) * intensityMult * elevationHydrationMult(elevationM) * indoorSweatMult);
   const sweatLossMl = Math.round(sweatRatePerHour * hrs);
   const fluidOz = Math.round(sweatLossMl * 0.0338);
   const carbsG = Math.round((caloriesBurned * 0.55) / 4);

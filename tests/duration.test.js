@@ -9,6 +9,9 @@ describe('estimateDuration', () => {
   it('slows down at high elevation', () => {
     expect(estimateDuration(40, 'road', 3000)).toBeGreaterThan(estimateDuration(40, 'road', 0));
   });
+  it('uses the stationary speed', () => {
+    expect(estimateDuration(14, 'stationary', 0)).toBe(60); // 14mi / 14mph * 60
+  });
 });
 
 describe('getDurationBucket', () => {
