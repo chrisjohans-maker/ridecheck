@@ -704,7 +704,9 @@ async function runCheckFromGeo(geo) {
           const omSunrise = weather.daily?.sunrise;
           const omSunset = weather.daily?.sunset;
           const omUVMax = weather.daily?.uv_index_max;
-          
+          const omApparentMax = weather.daily?.apparent_temperature_max;
+          const omApparentMin = weather.daily?.apparent_temperature_min;
+
           // Time-aligned merge, NOT a blind overwrite. NWS hourly starts at the
           // current hour, so a plain spread would (a) drop today's earlier hours —
           // tapping "Today" showed a partial day — and (b) leave uv_index on
@@ -712,11 +714,16 @@ async function runCheckFromGeo(geo) {
           // Keep OM's full-day time axis and overlay NWS values where the hour exists.
           appState.weather.hourly = mergeHourlyNWS(appState.weather.hourly, nws.hourly);
           appState.weather.daily = { ...appState.weather.daily, ...nws.daily };
-          
+
           // Restore Open-Meteo fields NWS doesn't provide
           if (omSunrise) appState.weather.daily.sunrise = omSunrise;
           if (omSunset) appState.weather.daily.sunset = omSunset;
           if (omUVMax) appState.weather.daily.uv_index_max = omUVMax;
+          // NWS daily has no real feels-like — fetchNWSForecast() fills
+          // apparent_temperature_max/min with a copy of temperature_2m_max/min.
+          // Keep Open-Meteo's real wind/humidity-adjusted values instead.
+          if (omApparentMax) appState.weather.daily.apparent_temperature_max = omApparentMax;
+          if (omApparentMin) appState.weather.daily.apparent_temperature_min = omApparentMin;
           
           console.log('NWS forecast data merged successfully');
           // Also override current weather code with NWS current hour data
@@ -727,11 +734,13 @@ async function runCheckFromGeo(geo) {
           });
           if (nwsHourIdx >= 0) {
             appState.weather.current.weather_code = nws.hourly.weather_code[nwsHourIdx];
-            // Also update current temp and wind from NWS if available
+            // Also update current temp from NWS if available. NOT apparent_temperature —
+            // NWS's hourly feed has no real feels-like here (fetchNWSForecast copies temp
+            // into it as a placeholder), so overwriting would clobber Open-Meteo's real
+            // wind/humidity-adjusted feels-like with plain air temp. Keep Open-Meteo's value.
             // Use != null so legitimate zeros (0°F, calm wind, due-north 0°, 0% humidity) aren't dropped
             if (nws.hourly.temperature_2m[nwsHourIdx] != null) {
               appState.weather.current.temperature_2m = nws.hourly.temperature_2m[nwsHourIdx];
-              appState.weather.current.apparent_temperature = nws.hourly.temperature_2m[nwsHourIdx];
             }
             if (nws.hourly.wind_speed_10m[nwsHourIdx] != null) {
               appState.weather.current.wind_speed_10m = nws.hourly.wind_speed_10m[nwsHourIdx];

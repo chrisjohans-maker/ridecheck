@@ -10,8 +10,12 @@
 // because NWS is more accurate for US locations. The result stays index-aligned
 // across every array, so callers can read hourly.X[i] alongside hourly.time[i].
 
+// apparent_temperature is deliberately excluded: fetchNWSForecast() has no real
+// feels-like from NWS, so it fills that field with a copy of temperature_2m.
+// Overlaying it here would clobber Open-Meteo's real wind/humidity-adjusted
+// feels-like with plain air temp. Keep Open-Meteo's apparent_temperature.
 const OVERLAY = [
-  'temperature_2m', 'apparent_temperature', 'weather_code',
+  'temperature_2m', 'weather_code',
   'precipitation_probability', 'wind_speed_10m', 'wind_direction_10m',
   'relative_humidity_2m',
 ];
