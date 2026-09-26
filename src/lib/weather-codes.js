@@ -50,8 +50,8 @@ export function nwsTextToWMO(text) {
   if (/snow/.test(t)) return 71;
   if (/fog|mist|haze/.test(t)) return 45;
   if (/mostly cloudy/.test(t)) return 3;
-  if (/overcast|cloudy/.test(t)) return 3;
   if (/partly/.test(t)) return 2;
+  if (/overcast|cloudy/.test(t)) return 3;
   if (/mostly clear|mostly sunny/.test(t)) return 1;
   if (/clear|sunny/.test(t)) return 0;
   return 2;

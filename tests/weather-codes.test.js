@@ -16,7 +16,9 @@ describe('nwsTextToWMO', () => {
     expect(nwsTextToWMO('Heavy Rain')).toBe(65);
     expect(nwsTextToWMO('Sunny')).toBe(0);
     expect(nwsTextToWMO('Partly Sunny')).toBe(2); // 'partly' branch
-    expect(nwsTextToWMO('Partly Cloudy')).toBe(3); // 'cloudy' matches before 'partly' (documents current behavior)
+    expect(nwsTextToWMO('Partly Cloudy')).toBe(2); // 'partly' branch, not overcast
+    expect(nwsTextToWMO('Mostly Cloudy')).toBe(3); // still overcast, unaffected by the partly fix
+    expect(nwsTextToWMO('Overcast')).toBe(3);
     expect(nwsTextToWMO('Thunderstorm')).toBe(95);
     expect(nwsTextToWMO('')).toBe(2); // unknown default
   });
