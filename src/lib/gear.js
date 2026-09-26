@@ -84,7 +84,7 @@ export function buildGearList(current, hourly, rideType, duration, bikeType, int
   const isHot  = fl > hotThresh;
   const isWarm = fl > 68 - intensityOffset;
   const humid  = current.relative_humidity_2m ?? 60;
-  const isLong = duration === 'long' || duration === 'epic';
+  const isLong = duration === 'long';
   const isMed  = duration === 'medium';
 
   // BOTTLES
@@ -147,7 +147,7 @@ export function buildGearList(current, hourly, rideType, duration, bikeType, int
 // drives sweat rate and fluid needs far higher than an equivalent outdoor ride.
 export function buildIndoorGearList(duration) {
   const gear = [];
-  const isLong = duration === 'long' || duration === 'epic';
+  const isLong = duration === 'long';
   const isMed  = duration === 'medium';
 
   gear.push({ icon:'🌀', cat:'Indoor setup', name:'High-volume fan (or two)', reason:'No airflow indoors — without a fan, sweat rate and core temp run much higher than outdoors at the same effort' });
