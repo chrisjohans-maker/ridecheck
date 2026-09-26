@@ -4921,24 +4921,17 @@ function renderRecoveryCard(entry) {
 }
 
 // ── TRAIL LINKS IN PREP ──
-document.addEventListener('click', e => {
-  if (e.target.closest('#trailsToggle')) {
-    const panel = $('trailLinksPrep');
-    const arrow = $('trailsArrow');
-    if (!panel) return;
-    panel.classList.toggle('hidden');
-    if (arrow) arrow.textContent = panel.classList.contains('hidden') ? '\u2193' : '\u2191';
-    // Render trail links if empty
-    if (!panel.innerHTML.trim()) {
-      panel.innerHTML = [
-        {name:'Komoot', url:'https://www.komoot.com/discover', icon:'\u{1F6B5}', desc:'Routes & navigation'},
-        {name:'Strava Heatmap', url:'https://www.strava.com/heatmap', icon:'\u{1F525}', desc:'Popular cycling routes'},
-        {name:'RideWithGPS', url:'https://ridewithgps.com/find', icon:'\u{1F4CD}', desc:'Route planning'},
-        {name:'OpenCycleMap', url:'https://www.opencyclemap.org/', icon:'\u{1F5FA}', desc:'Cycling-specific maps'},
-        {name:'Trailforks', url:'https://www.trailforks.com/', icon:'\u{1F332}', desc:'MTB & gravel trails'},
-        {name:'Google Maps Bike Shops', url:'https://www.google.com/maps/search/bike+shops+near+me', icon:'\u{1F6E0}', desc:'Nearby shops & repair'},
-      ].map(l => '<a href="' + l.url + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text)"><span style="font-size:1.2rem">' + l.icon + '</span><div><div style="font-weight:600;font-size:0.88rem">' + l.name + '</div><div style="font-size:0.78rem;color:var(--text-muted)">' + l.desc + '</div></div></a>').join('');
-    }
-  }
+$('sectionTrails')?.addEventListener('toggle', function () {
+  if (!this.open) return;
+  const panel = $('trailLinksPrep');
+  if (!panel || panel.innerHTML.trim()) return;
+  panel.innerHTML = [
+    {name:'Komoot', url:'https://www.komoot.com/discover', icon:'\u{1F6B5}', desc:'Routes & navigation'},
+    {name:'Strava Heatmap', url:'https://www.strava.com/heatmap', icon:'\u{1F525}', desc:'Popular cycling routes'},
+    {name:'RideWithGPS', url:'https://ridewithgps.com/find', icon:'\u{1F4CD}', desc:'Route planning'},
+    {name:'OpenCycleMap', url:'https://www.opencyclemap.org/', icon:'\u{1F5FA}', desc:'Cycling-specific maps'},
+    {name:'Trailforks', url:'https://www.trailforks.com/', icon:'\u{1F332}', desc:'MTB & gravel trails'},
+    {name:'Google Maps Bike Shops', url:'https://www.google.com/maps/search/bike+shops+near+me', icon:'\u{1F6E0}', desc:'Nearby shops & repair'},
+  ].map(l => '<a href="' + l.url + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;text-decoration:none;color:var(--text)"><span style="font-size:1.2rem">' + l.icon + '</span><div><div style="font-weight:600;font-size:0.88rem">' + l.name + '</div><div style="font-size:0.78rem;color:var(--text-muted)">' + l.desc + '</div></div></a>').join('');
 });
 
