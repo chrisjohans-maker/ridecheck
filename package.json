@@ -11,5 +11,8 @@
   "devDependencies": {
     "vite": "^5",
     "vitest": "^2"
+  },
+  "dependencies": {
+    "html2canvas-pro": "^2.5.1"
   }
 }

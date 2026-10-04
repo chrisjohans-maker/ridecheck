@@ -16,6 +16,7 @@ import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
 import { mergeHourlyNWS } from './lib/weather-merge.js';
 import { buildGearList } from './lib/gear.js';
+import html2canvas from 'html2canvas-pro';
 
 // Build id baked in at build time (Vite `define`); 'dev' in un-built contexts.
 const RUNNING_BUILD = typeof __BUILD_ID__ !== 'undefined' ? __BUILD_ID__ : 'dev';
@@ -291,6 +292,7 @@ function init() {
   setupRideLog();
   setupShare();
   setupLogFilter();
+  setupInsightsShare();
   setupSettings();
   autoLoadDefaultProfile();
   autoLoadLastLocation();
@@ -2481,9 +2483,14 @@ function renderLogInsights() {
 
   el.setAttribute('style', 'background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:12px;');
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <span style="font-size:0.8rem;font-weight:700;color:var(--text);">Insights</span>
-      <span style="font-size:0.7rem;font-weight:600;color:var(--text-faint);">${escHtml(scopeLabel)}</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.7rem;font-weight:600;color:var(--text-faint);">${escHtml(scopeLabel)}</span>
+        <button type="button" class="insights-share-btn" aria-label="Text these insights" title="Text these insights" style="background:var(--bg);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);cursor:pointer;flex-shrink:0;-webkit-appearance:none;appearance:none;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        </button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;">${tiles}</div>
     ${chart}
@@ -2813,6 +2820,46 @@ function renderLogTimeNav(allLog) {
     + `<span aria-hidden="true" style="${chevStyle}">▾</span>`
     + `</span>`
     + `</div>${monthChips}`;
+}
+
+// Snapshot the live Insights panel to a PNG and hand it to the native share
+// sheet (Messages, AirDrop, etc.) so the text looks like the real view instead
+// of a plain-text summary. Button lives inside the captured node, so it's
+// hidden for the instant of capture rather than excluded via a second render.
+async function shareInsightsImage(btn) {
+  const el = $('logInsights');
+  if (!el) return;
+  btn.disabled = true;
+  btn.style.visibility = 'hidden';
+  try {
+    if (document.fonts?.ready) await document.fonts.ready;
+    const canvas = await html2canvas(el, { backgroundColor: null, scale: 2 });
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('capture failed');
+    const file = new File([blob], 'ridecheck-insights.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'RideCheck insights' });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ridecheck-insights.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    if (e && e.name !== 'AbortError') showToast('Could not create image');
+  } finally {
+    btn.style.visibility = '';
+    btn.disabled = false;
+  }
+}
+
+function setupInsightsShare() {
+  $('logInsights')?.addEventListener('click', e => {
+    const btn = e.target.closest('.insights-share-btn');
+    if (!btn) return;
+    shareInsightsImage(btn);
+  });
 }
 
 function setupLogFilter() {
