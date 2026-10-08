@@ -4508,11 +4508,13 @@ function renderConditions(current, daily, aq) {
       <div style="min-width:0;">
         <div style="font-family:'Space Grotesk',monospace;font-weight:700;font-size:1.02rem;color:${opts.color || 'var(--text)'};line-height:1.15;">${value}</div>
         <div style="font-size:0.64rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;">${escHtml(label)}</div>
+        ${opts.sub ? `<div style="font-size:0.62rem;color:var(--text-faint);margin-top:1px;">${escHtml(opts.sub)}</div>` : ''}
       </div>
     </div>`;
 
+  const fl = current.apparent_temperature ?? current.temperature_2m;
   const tiles = [
-    tile(uiIcon('thermometer', 22), `${toDisplay(current.temperature_2m)}${unitLabel()}`, 'Temp'),
+    tile(uiIcon('thermometer', 22), `${toDisplay(fl)}${unitLabel()}`, 'Feels like', { sub: `Air ${toDisplay(current.temperature_2m)}${unitLabel()}` }),
     tile(uiIcon('wind', 22), windVal, 'Wind'),
     tile(uiIcon('droplet', 22), `${current.relative_humidity_2m}%`, 'Humidity'),
     tile(uiIcon('sun', 22), escHtml(uvLabel), `UV ${uv == null ? '' : Math.round(uv)}`),

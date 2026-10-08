@@ -50,10 +50,11 @@ export function buildGearList(current, hourly, rideType, duration, bikeType, int
   if (flEff < 45 || (wind > 18 && flEff < 65))
     gear.push({ icon:'🦺', cat:'Clothing', name:'Wind vest / gilet', reason: flEff < 45 ? 'Insulates core without overheating arms' : `${toWindDisplay(wind, tempUnit)} wind — protect your chest` });
 
-  // GLOVES — hands don't generate much heat, less intensity adjustment (halved)
-  const flGloves = fl + intensityOffset * 0.5;
+  // GLOVES — based directly on feels-like temp, no intensity fudge (hands don't
+  // warm up from effort the way core/legs do — a hard-effort offset would mask
+  // genuinely cool conditions and silently skip the glove recommendation)
   if (fl < 32 || isSnowing)         gear.push({ icon:'🧤', cat:'Clothing', name:'Insulated full-finger gloves', reason:'Below freezing — bare hands lose grip and dexterity fast' });
-  else if (flGloves < 52 || gusts > 22) gear.push({ icon:'🧤', cat:'Clothing', name:'Light cycling gloves', reason: flGloves < 52 ? `${toDisplay(fl, tempUnit)}${unitLabel(tempUnit)} — fingers will numb without protection` : `Gusts to ${toWindDisplay(gusts, tempUnit)} adds wind chill to hands` });
+  else if (fl < 52 || gusts > 22)   gear.push({ icon:'🧤', cat:'Clothing', name:'Light cycling gloves', reason: fl < 52 ? `${toDisplay(fl, tempUnit)}${unitLabel(tempUnit)} feels like — fingers will numb without protection` : `Gusts to ${toWindDisplay(gusts, tempUnit)} adds wind chill to hands` });
 
   // NECK / EARS
   if (flEff < 45)               gear.push({ icon:'🧣', cat:'Clothing', name:'Neck gaiter + ear covers', reason:'Seals the cold gap between collar and helmet' });
