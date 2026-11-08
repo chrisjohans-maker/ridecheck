@@ -50,13 +50,17 @@ async function handle(deps) {
       // Don't reveal the allow-list; behave like success so we don't leak who's allowed.
       return { statusCode: 200, body: { ok: true } };
     }
+    // Fail closed when truly unconfigured: no allow-list, no mail provider, and
+    // not in explicit dev mode means there's no legitimate way to sign anyone in,
+    // so grant nothing (a deploy before env setup stays inert rather than open).
+    if (!allowed && !env.RESEND_API_KEY && !env.SYNC_DEV) return { statusCode: 503, body: { error: 'Sync not configured' } };
     const code = randomCode();
     await store.set('code:' + hashEmail(email), JSON.stringify({ code, ts: now(), attempts: 0 }));
     if (!env.RESEND_API_KEY) {
-      // No mail provider configured. Surface the code so setup/testing isn't blocked,
-      // but never in production-with-allow-list (that would be an open bypass).
+      // No mail provider: in explicit dev mode, surface the code so local testing
+      // isn't blocked; with an allow-list set, this is a real config error.
       if (allowed) return { statusCode: 500, body: { error: 'Email not configured' } };
-      return { statusCode: 200, body: { ok: true, devCode: code } };
+      return { statusCode: 200, body: { ok: true, devCode: code } }; // env.SYNC_DEV only, from the guard above
     }
     const res = await doFetch('https://api.resend.com/emails', {
       method: 'POST',

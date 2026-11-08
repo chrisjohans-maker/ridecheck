@@ -76,8 +76,8 @@ const baseDeps = (over = {}) => ({
   method: 'POST',
   store: fakeStore(),
   doFetch: async () => ({ ok: true, json: async () => ({ id: 'email_1' }) }),
-  env: {},
   now: () => 1_000_000,
+  env: { SYNC_DEV: '1' }, // default tests run in dev mode; specific tests override env
   randomKey: () => 'key' + (++_n),
   randomCode: () => '424242',
   hashEmail: (e) => 'h(' + e + ')',
@@ -99,10 +99,17 @@ describe('sync handle()', () => {
     expect(r.statusCode).toBe(400);
   });
 
-  it('request: returns devCode when no mail provider and no allow-list', async () => {
-    const r = await handle(baseDeps({ body: { action: 'request', email: 'a@b.co' } }));
+  it('request: returns devCode in explicit dev mode (SYNC_DEV)', async () => {
+    const r = await handle(baseDeps({ env: { SYNC_DEV: '1' }, body: { action: 'request', email: 'a@b.co' } }));
     expect(r.statusCode).toBe(200);
     expect(r.body.devCode).toBe('424242');
+  });
+
+  it('request: fails closed (503) when unconfigured — no allow-list, no dev mode', async () => {
+    const store = fakeStore();
+    const r = await handle(baseDeps({ store, env: {}, body: { action: 'request', email: 'a@b.co' } }));
+    expect(r.statusCode).toBe(503);
+    expect([...store.m.keys()].some(k => k.startsWith('code:'))).toBe(false);
   });
 
   it('request: allow-list mismatch looks like success but stores nothing', async () => {
