@@ -1,18 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseSyncToken, isValidEmail, normalizeEmail, unionRides, reconcile } from '../src/lib/sync.js';
+import { isValidEmail, normalizeEmail, unionRides, reconcile } from '../src/lib/sync.js';
 import { handle } from '../netlify/functions/sync.js';
-
-describe('parseSyncToken', () => {
-  it('extracts a valid token', () => {
-    expect(parseSyncToken('https://ridecheck.app/?synctoken=abc123XYZ_-')).toBe('abc123XYZ_-');
-  });
-  it('returns null when absent or malformed', () => {
-    expect(parseSyncToken('https://ridecheck.app/')).toBe(null);
-    expect(parseSyncToken('https://ridecheck.app/?synctoken=short')).toBe(null); // < 8 chars
-    expect(parseSyncToken('https://ridecheck.app/?synctoken=has spaces!')).toBe(null);
-    expect(parseSyncToken('not a url')).toBe(null);
-  });
-});
 
 describe('email helpers', () => {
   it('validates real-ish addresses', () => {
@@ -91,6 +79,7 @@ const baseDeps = (over = {}) => ({
   env: {},
   now: () => 1_000_000,
   randomKey: () => 'key' + (++_n),
+  randomCode: () => '424242',
   hashEmail: (e) => 'h(' + e + ')',
   origin: 'https://ridecheck.app',
   ...over,
@@ -110,10 +99,10 @@ describe('sync handle()', () => {
     expect(r.statusCode).toBe(400);
   });
 
-  it('request: returns devLink when no mail provider and no allow-list', async () => {
+  it('request: returns devCode when no mail provider and no allow-list', async () => {
     const r = await handle(baseDeps({ body: { action: 'request', email: 'a@b.co' } }));
     expect(r.statusCode).toBe(200);
-    expect(r.body.devLink).toContain('synctoken=');
+    expect(r.body.devCode).toBe('424242');
   });
 
   it('request: allow-list mismatch looks like success but stores nothing', async () => {
@@ -121,7 +110,8 @@ describe('sync handle()', () => {
     const r = await handle(baseDeps({ store, env: { SYNC_ALLOWED_EMAIL: 'me@x.com' }, body: { action: 'request', email: 'stranger@x.com' } }));
     expect(r.statusCode).toBe(200);
     expect(r.body.ok).toBe(true);
-    expect([...store.m.keys()].some(k => k.startsWith('token:'))).toBe(false);
+    expect(r.body.devCode).toBeUndefined();
+    expect([...store.m.keys()].some(k => k.startsWith('code:'))).toBe(false);
   });
 
   it('request: allow-listed email with no mail provider is a config error (no bypass)', async () => {
@@ -132,9 +122,9 @@ describe('sync handle()', () => {
   it('request → verify → push → pull round-trip', async () => {
     const store = fakeStore();
     const req = await handle(baseDeps({ store, body: { action: 'request', email: 'me@x.com' } }));
-    const token = req.body.devLink.split('synctoken=')[1];
+    const code = req.body.devCode;
 
-    const ver = await handle(baseDeps({ store, body: { action: 'verify', token } }));
+    const ver = await handle(baseDeps({ store, body: { action: 'verify', email: 'me@x.com', code } }));
     expect(ver.statusCode).toBe(200);
     expect(ver.body.email).toBe('me@x.com');
     const { sessionId } = ver.body;
@@ -149,19 +139,33 @@ describe('sync handle()', () => {
     expect(pull.body.rides[0].distanceMi).toBe(40);
   });
 
-  it('verify: a token works only once', async () => {
+  it('verify: a code works only once', async () => {
     const store = fakeStore();
-    const req = await handle(baseDeps({ store, body: { action: 'request', email: 'me@x.com' } }));
-    const token = req.body.devLink.split('synctoken=')[1];
-    expect((await handle(baseDeps({ store, body: { action: 'verify', token } }))).statusCode).toBe(200);
-    expect((await handle(baseDeps({ store, body: { action: 'verify', token } }))).statusCode).toBe(400); // reused
+    await handle(baseDeps({ store, body: { action: 'request', email: 'me@x.com' } }));
+    expect((await handle(baseDeps({ store, body: { action: 'verify', email: 'me@x.com', code: '424242' } }))).statusCode).toBe(200);
+    expect((await handle(baseDeps({ store, body: { action: 'verify', email: 'me@x.com', code: '424242' } }))).statusCode).toBe(400); // reused
   });
 
-  it('verify: expired token is rejected', async () => {
+  it('verify: rejects a malformed code', async () => {
+    const r = await handle(baseDeps({ body: { action: 'verify', email: 'me@x.com', code: 'abc' } }));
+    expect(r.statusCode).toBe(400);
+  });
+
+  it('verify: wrong code locks out after 5 tries (brute-force guard)', async () => {
+    const store = fakeStore();
+    await handle(baseDeps({ store, body: { action: 'request', email: 'me@x.com' } }));
+    for (let i = 0; i < 5; i++) {
+      expect((await handle(baseDeps({ store, body: { action: 'verify', email: 'me@x.com', code: '000000' } }))).statusCode).toBe(400);
+    }
+    // 6th try is locked out even if the code were right
+    const r = await handle(baseDeps({ store, body: { action: 'verify', email: 'me@x.com', code: '424242' } }));
+    expect(r.statusCode).toBe(429);
+  });
+
+  it('verify: expired code is rejected', async () => {
     const store = fakeStore();
     await handle(baseDeps({ store, now: () => 0, body: { action: 'request', email: 'me@x.com' } }));
-    const token = [...store.m.keys()].find(k => k.startsWith('token:')).slice('token:'.length);
-    const r = await handle(baseDeps({ store, now: () => 20 * 60 * 1000, body: { action: 'verify', token } }));
+    const r = await handle(baseDeps({ store, now: () => 20 * 60 * 1000, body: { action: 'verify', email: 'me@x.com', code: '424242' } }));
     expect(r.statusCode).toBe(400);
   });
 
@@ -173,8 +177,6 @@ describe('sync handle()', () => {
 
   it('pull of an untouched account returns an empty log', async () => {
     const store = fakeStore();
-    const ver = await handle(baseDeps({ store, body: { action: 'verify', token: 't' }, now: () => 1 }));
-    // manually seed a session to pull against
     await store.set('sess:S', JSON.stringify({ email: 'me@x.com', ts: 1_000_000 }));
     const pull = await handle(baseDeps({ store, body: { action: 'pull', sessionId: 'S' } }));
     expect(pull.statusCode).toBe(200);
@@ -182,15 +184,17 @@ describe('sync handle()', () => {
     expect(pull.body.updatedAt).toBe(0);
   });
 
-  it('request: sends via Resend when a key is present', async () => {
+  it('request: sends the code via Resend when a key is present', async () => {
     let called = null;
     const doFetch = async (url, opts) => { called = { url, opts }; return { ok: true, json: async () => ({}) }; };
     const r = await handle(baseDeps({ doFetch, env: { RESEND_API_KEY: 'rk_test' }, body: { action: 'request', email: 'me@x.com' } }));
     expect(r.statusCode).toBe(200);
     expect(called.url).toBe('https://api.resend.com/emails');
     expect(called.opts.headers.Authorization).toBe('Bearer rk_test');
-    expect(JSON.parse(called.opts.body).to).toBe('me@x.com');
-    expect(r.body.devLink).toBeUndefined(); // never leak the link once real email is on
+    const sent = JSON.parse(called.opts.body);
+    expect(sent.to).toBe('me@x.com');
+    expect(sent.html).toContain('424242');       // the code is in the email body
+    expect(r.body.devCode).toBeUndefined();       // never leak the code once real email is on
   });
 
   it('push drops junk entries and caps the list', async () => {

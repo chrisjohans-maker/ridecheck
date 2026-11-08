@@ -14,7 +14,7 @@ import { computeInsights } from './lib/insights.js';
 import { weatherSvg, uiIcon } from './lib/weather-icons.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
-import { parseSyncToken, isValidEmail, normalizeEmail, reconcile } from './lib/sync.js';
+import { isValidEmail, normalizeEmail, reconcile } from './lib/sync.js';
 import { mergeHourlyNWS } from './lib/weather-merge.js';
 import { buildGearList } from './lib/gear.js';
 import html2canvas from 'html2canvas-pro';
@@ -4353,35 +4353,44 @@ async function syncCall(payload, ms = 10000) {
   return { ok: res.ok, status: res.status, data };
 }
 
-// Kick off sign-in: email the user a magic link.
-async function requestSyncSignIn(emailRaw) {
-  const email = normalizeEmail(emailRaw);
-  if (!isValidEmail(email)) { showToast('Enter a valid email'); return; }
-  showToast('Sending sign-in link…');
+// Sign-in, step 1: email the user a 6-digit code.
+async function requestSyncCode(email) {
+  showToast('Sending a sign-in code…');
   try {
     const { ok, data } = await syncCall({ action: 'request', email });
-    if (!ok) { showToast('Could not send link — try again'); return; }
-    // Dev convenience only: server returns devLink when no mail provider is set
+    if (!ok) { showToast('Could not send code — try again'); return false; }
+    // Dev convenience only: server returns devCode when no mail provider is set
     // AND no allow-list is configured. In production (allow-list set) this never fires.
-    if (data.devLink) { console.warn('Sync dev link:', data.devLink); showToast('Dev link in console'); return; }
-    showToast('Check your email for a sign-in link');
-  } catch { showToast('Could not send link — try again'); }
+    if (data.devCode) { console.warn('Sync dev code:', data.devCode); showToast('Dev code in console'); return true; }
+    showToast('Check your email for a 6-digit code');
+    return true;
+  } catch { showToast('Could not send code — try again'); return false; }
 }
 
-// Finish sign-in when the app opens from a magic link (?synctoken=…).
-async function handleSyncCallback() {
-  const token = parseSyncToken(location.href);
-  if (!token) return;
-  // Strip the token from the URL immediately so a reload can't replay it.
-  try { history.replaceState({}, '', location.pathname + location.hash); } catch {}
+// Sign-in, step 2: exchange the emailed code for a session, then restore.
+async function verifySyncCode(email, code) {
   try {
-    const { ok, data } = await syncCall({ action: 'verify', token });
-    if (!ok || !data.sessionId) { showToast('Sign-in link expired — try again'); return; }
+    const { ok, status, data } = await syncCall({ action: 'verify', email, code: String(code).trim() });
+    if (status === 429) { showToast('Too many tries — request a new code'); return; }
+    if (!ok || !data.sessionId) { showToast('Wrong or expired code — try again'); return; }
     setSyncSession({ sessionId: data.sessionId, email: data.email });
+    updateSyncUI();
     showToast('Auto-sync on — restoring your rides…');
     await syncPull();
-    updateSyncUI();
   } catch { showToast('Sign-in failed — try again'); }
+}
+
+// Drive the two prompts. (Native prompts keep this zero-dependency; both steps
+// happen inside the app, so iOS never bounces sign-in out to Safari.)
+async function startSyncSignIn() {
+  const email = normalizeEmail(prompt('Enter your email to turn on auto-sync.\nWe’ll send a 6-digit sign-in code.') || '');
+  if (!email) return;
+  if (!isValidEmail(email)) { showToast('Enter a valid email'); return; }
+  const sent = await requestSyncCode(email);
+  if (!sent) return;
+  const code = (prompt('Enter the 6-digit code from your email:') || '').trim();
+  if (!code) return;
+  await verifySyncCode(email, code);
 }
 
 // Pull the server copy and reconcile with whatever's local (union, no dupes).
@@ -4448,9 +4457,7 @@ function setupSync() {
     if (sess?.sessionId) {
       if (confirm(`Auto-sync is on (${sess.email}). Turn it off on this device?\n\nYour rides stay backed up in the cloud — you can sign back in anytime.`)) signOutSync();
     } else {
-      const email = prompt('Enter your email to turn on auto-sync.\nWe’ll send a one-time sign-in link.');
-      if (email == null) return;
-      requestSyncSignIn(email);
+      startSyncSignIn();
     }
   });
 }
@@ -4462,8 +4469,8 @@ init();
 setTimeout(checkForUpdate, 4000);
 setTimeout(autoSyncStrava, 3000); // background Strava refresh shortly after open
 
-// Cloud log sync: finish any magic-link sign-in, then pull the server copy.
-handleSyncCallback().then(() => { if (getSyncSession()?.sessionId) syncPull(); });
+// Cloud log sync: pull the server copy on open (restores a wiped log).
+if (getSyncSession()?.sessionId) syncPull();
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') { checkForUpdate(); autoSyncStrava(); syncPull(); }

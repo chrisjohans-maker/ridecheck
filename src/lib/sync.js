@@ -2,16 +2,6 @@
 // the Netlify function; this module is just the logic that's worth testing.
 import { rideKey } from './backup.js';
 
-// Pull a one-time magic-link token out of a callback URL (?synctoken=...).
-// Returns the token string, or null if absent/garbage.
-export function parseSyncToken(urlStr) {
-  try {
-    const u = new URL(urlStr);
-    const t = u.searchParams.get('synctoken');
-    return t && /^[A-Za-z0-9_-]{8,128}$/.test(t) ? t : null;
-  } catch { return null; }
-}
-
 // Lenient-but-real email check. We're not validating deliverability, just
 // rejecting obvious junk before we bother the server.
 export function isValidEmail(s) {

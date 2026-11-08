@@ -2,10 +2,14 @@
 // an iOS PWA uninstall (which wipes all local storage) can't destroy it — the
 // log auto-restores on sign-in.
 //
-//   POST { action:'request', email }            → email a one-time magic link
-//   POST { action:'verify',  token }            → exchange link token for a session → { sessionId, email }
+//   POST { action:'request', email }            → email a one-time 6-digit code
+//   POST { action:'verify',  email, code }      → exchange the code for a session → { sessionId, email }
 //   POST { action:'push',    sessionId, rides } → store the log           → { ok, updatedAt }
 //   POST { action:'pull',    sessionId }        → fetch the stored log     → { rides, updatedAt }
+//
+// A 6-digit code (not a magic link) is used because tapping a link on iOS opens
+// Safari, whose storage is walled off from an installed home-screen PWA — the
+// session would land in the wrong place. The code is typed into the app itself.
 //
 // Only the owner's own data is reachable, and only with a valid session. The
 // log is the sole thing stored; no weather, no device info.
@@ -17,7 +21,8 @@
 //   SYNC_BASE_URL      (optional) override the link origin (defaults to the
 //                      request's own origin).
 
-const TOKEN_TTL_MS = 15 * 60 * 1000;            // magic links die fast
+const CODE_TTL_MS = 15 * 60 * 1000;             // sign-in codes die fast
+const MAX_CODE_ATTEMPTS = 5;                     // lock a code after this many wrong tries
 const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000; // a device stays signed in ~1yr
 const MAX_RIDES = 5000;                           // matches the client log cap
 
@@ -31,7 +36,7 @@ async function syncStore() {
 // Core logic, decoupled from Netlify's event shape, Blobs, crypto, and fetch so
 // it's fully unit-testable with fakes.
 async function handle(deps) {
-  const { method, body, store, doFetch, env, now, randomKey, hashEmail } = deps;
+  const { method, body, store, doFetch, env, now, randomKey, randomCode, hashEmail } = deps;
   if (method === 'OPTIONS') return { statusCode: 200, body: '' };
   if (method !== 'POST') return { statusCode: 405, body: { error: 'Method not allowed' } };
 
@@ -45,15 +50,13 @@ async function handle(deps) {
       // Don't reveal the allow-list; behave like success so we don't leak who's allowed.
       return { statusCode: 200, body: { ok: true } };
     }
-    const token = randomKey();
-    await store.set('token:' + token, JSON.stringify({ email, ts: now() }));
-    const base = (env.SYNC_BASE_URL || deps.origin || '').replace(/\/$/, '');
-    const link = `${base}/?synctoken=${token}`;
+    const code = randomCode();
+    await store.set('code:' + hashEmail(email), JSON.stringify({ code, ts: now(), attempts: 0 }));
     if (!env.RESEND_API_KEY) {
-      // No mail provider configured. Surface the link so setup/testing isn't blocked,
+      // No mail provider configured. Surface the code so setup/testing isn't blocked,
       // but never in production-with-allow-list (that would be an open bypass).
       if (allowed) return { statusCode: 500, body: { error: 'Email not configured' } };
-      return { statusCode: 200, body: { ok: true, devLink: link } };
+      return { statusCode: 200, body: { ok: true, devCode: code } };
     }
     const res = await doFetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -61,10 +64,10 @@ async function handle(deps) {
       body: JSON.stringify({
         from: env.SYNC_FROM || 'RideCheck <onboarding@resend.dev>',
         to: email,
-        subject: 'Your RideCheck sign-in link',
-        html: `<p>Tap to turn on RideCheck auto-sync on this device:</p>
-               <p><a href="${link}">Sign in to RideCheck</a></p>
-               <p style="color:#888;font-size:13px">This link works once and expires in 15 minutes. If you didn't request it, ignore this email.</p>`,
+        subject: `${code} is your RideCheck sign-in code`,
+        html: `<p>Your RideCheck sign-in code:</p>
+               <p style="font-size:28px;font-weight:700;letter-spacing:4px">${code}</p>
+               <p style="color:#888;font-size:13px">Enter it in the app to turn on auto-sync. It expires in 15 minutes. If you didn't request it, ignore this email.</p>`,
       }),
     });
     if (!res.ok) {
@@ -75,16 +78,24 @@ async function handle(deps) {
   }
 
   if (action === 'verify') {
-    const token = body.token;
-    if (!token) return { statusCode: 400, body: { error: 'Missing token' } };
-    const raw = await store.get('token:' + token);
-    if (!raw) return { statusCode: 400, body: { error: 'Link expired or already used' } };
-    await store.delete('token:' + token); // single-use
-    let entry; try { entry = JSON.parse(raw); } catch { return { statusCode: 400, body: { error: 'Bad token' } }; }
-    if (!entry || (now() - (entry.ts || 0)) > TOKEN_TTL_MS) return { statusCode: 400, body: { error: 'Link expired' } };
+    const email = (body.email || '').trim().toLowerCase();
+    const code = String(body.code || '').trim();
+    if (!email || !/^\d{6}$/.test(code)) return { statusCode: 400, body: { error: 'Enter the 6-digit code' } };
+    const key = 'code:' + hashEmail(email);
+    const raw = await store.get(key);
+    if (!raw) return { statusCode: 400, body: { error: 'Code expired — request a new one' } };
+    let entry; try { entry = JSON.parse(raw); } catch { await store.delete(key); return { statusCode: 400, body: { error: 'Bad code' } }; }
+    if (!entry || (now() - (entry.ts || 0)) > CODE_TTL_MS) { await store.delete(key); return { statusCode: 400, body: { error: 'Code expired — request a new one' } }; }
+    if ((entry.attempts || 0) >= MAX_CODE_ATTEMPTS) { await store.delete(key); return { statusCode: 429, body: { error: 'Too many tries — request a new code' } }; }
+    if (code !== entry.code) {
+      entry.attempts = (entry.attempts || 0) + 1;
+      await store.set(key, JSON.stringify(entry));
+      return { statusCode: 400, body: { error: 'Wrong code' } };
+    }
+    await store.delete(key); // single-use
     const sessionId = randomKey();
-    await store.set('sess:' + sessionId, JSON.stringify({ email: entry.email, ts: now() }));
-    return { statusCode: 200, body: { sessionId, email: entry.email } };
+    await store.set('sess:' + sessionId, JSON.stringify({ email, ts: now() }));
+    return { statusCode: 200, body: { sessionId, email } };
   }
 
   // push / pull both need a live session.
@@ -141,6 +152,7 @@ async function handler(event) {
       env: process.env,
       now: () => Date.now(),
       randomKey: () => crypto.randomBytes(24).toString('base64url'),
+      randomCode: () => String(crypto.randomInt(0, 1000000)).padStart(6, '0'),
       hashEmail: (e) => crypto.createHash('sha256').update(String(e)).digest('hex').slice(0, 32),
       origin: host ? `${proto}://${host}` : '',
     });
