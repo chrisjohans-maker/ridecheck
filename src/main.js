@@ -14,6 +14,7 @@ import { computeInsights } from './lib/insights.js';
 import { weatherSvg, uiIcon } from './lib/weather-icons.js';
 import { updateAvailable } from './lib/version.js';
 import { parseBackup, mergeRides } from './lib/backup.js';
+import { parseSyncToken, isValidEmail, normalizeEmail, reconcile } from './lib/sync.js';
 import { mergeHourlyNWS } from './lib/weather-merge.js';
 import { buildGearList } from './lib/gear.js';
 import html2canvas from 'html2canvas-pro';
@@ -294,6 +295,7 @@ function init() {
   setupLogFilter();
   setupInsightsShare();
   setupSettings();
+  setupSync();
   autoLoadDefaultProfile();
   autoLoadLastLocation();
 }
@@ -1992,6 +1994,7 @@ function getRideLog() {
 
 function saveRideLog(entries) {
   localStorage.setItem('ridecheck_log', JSON.stringify(entries));
+  scheduleSyncPush(); // if signed in, mirror the log to the cloud (debounced)
 }
 
 let logUnit = 'mi';
@@ -4324,14 +4327,146 @@ function setupStrava() {
 })();
 
 
+// ─── CLOUD LOG SYNC ───────────────────────────────────────────
+// The ride log lives in localStorage, which iOS wipes when a home-screen PWA is
+// uninstalled. Sync mirrors the log to a Netlify-backed store so it auto-restores
+// on sign-in. Day-to-day it's invisible: a silent push on every log change and a
+// pull on open. The ONLY user-facing step is a one-time magic-link sign-in per
+// device (nothing survives an uninstall to identify you automatically).
+const SYNC_FN = '/.netlify/functions/sync';
+
+function getSyncSession() {
+  try { return JSON.parse(localStorage.getItem('ridecheck_sync') || 'null'); } catch { return null; }
+}
+function setSyncSession(s) {
+  if (s) localStorage.setItem('ridecheck_sync', JSON.stringify(s));
+  else localStorage.removeItem('ridecheck_sync');
+}
+
+async function syncCall(payload, ms = 10000) {
+  const res = await fetchWithTimeout(SYNC_FN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }, ms);
+  let data = {}; try { data = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, data };
+}
+
+// Kick off sign-in: email the user a magic link.
+async function requestSyncSignIn(emailRaw) {
+  const email = normalizeEmail(emailRaw);
+  if (!isValidEmail(email)) { showToast('Enter a valid email'); return; }
+  showToast('Sending sign-in link…');
+  try {
+    const { ok, data } = await syncCall({ action: 'request', email });
+    if (!ok) { showToast('Could not send link — try again'); return; }
+    // Dev convenience only: server returns devLink when no mail provider is set
+    // AND no allow-list is configured. In production (allow-list set) this never fires.
+    if (data.devLink) { console.warn('Sync dev link:', data.devLink); showToast('Dev link in console'); return; }
+    showToast('Check your email for a sign-in link');
+  } catch { showToast('Could not send link — try again'); }
+}
+
+// Finish sign-in when the app opens from a magic link (?synctoken=…).
+async function handleSyncCallback() {
+  const token = parseSyncToken(location.href);
+  if (!token) return;
+  // Strip the token from the URL immediately so a reload can't replay it.
+  try { history.replaceState({}, '', location.pathname + location.hash); } catch {}
+  try {
+    const { ok, data } = await syncCall({ action: 'verify', token });
+    if (!ok || !data.sessionId) { showToast('Sign-in link expired — try again'); return; }
+    setSyncSession({ sessionId: data.sessionId, email: data.email });
+    showToast('Auto-sync on — restoring your rides…');
+    await syncPull();
+    updateSyncUI();
+  } catch { showToast('Sign-in failed — try again'); }
+}
+
+// Pull the server copy and reconcile with whatever's local (union, no dupes).
+// On a fresh install the local log is empty, so this restores everything.
+async function syncPull() {
+  const sess = getSyncSession();
+  if (!sess?.sessionId) return;
+  try {
+    const { ok, status, data } = await syncCall({ action: 'pull', sessionId: sess.sessionId });
+    if (status === 401) { setSyncSession(null); updateSyncUI(); showToast('Signed out — sign in again to sync'); return; }
+    if (!ok) return;
+    const local = getRideLog();
+    const { merged, changedLocally, pushNeeded } = reconcile(local, data.rides || []);
+    if (changedLocally) {
+      localStorage.setItem('ridecheck_log', JSON.stringify(merged)); // write without re-triggering push
+      renderLogEntries(); updateLogSubtitle();
+      if (typeof renderLogStats === 'function') renderLogStats();
+      if (typeof renderWeeklyGoal === 'function') renderWeeklyGoal();
+      const added = merged.length - local.length;
+      if (added > 0) showToast(`Restored ${added} ride${added !== 1 ? 's' : ''} from the cloud`);
+    }
+    if (pushNeeded) { saveRideLog(merged); } // server was behind — scheduleSyncPush fires
+  } catch { /* offline / transient — try again next open */ }
+}
+
+// Debounced background push. Coalesces a burst of edits into one write.
+let _syncPushTimer = null;
+function scheduleSyncPush() {
+  if (!getSyncSession()?.sessionId) return;
+  clearTimeout(_syncPushTimer);
+  _syncPushTimer = setTimeout(syncPushNow, 1500);
+}
+async function syncPushNow() {
+  const sess = getSyncSession();
+  if (!sess?.sessionId) return;
+  try {
+    const { status } = await syncCall({ action: 'push', sessionId: sess.sessionId, rides: getRideLog() });
+    if (status === 401) { setSyncSession(null); updateSyncUI(); }
+  } catch { /* transient — next change reschedules */ }
+}
+
+function signOutSync() {
+  setSyncSession(null);
+  updateSyncUI();
+  showToast('Auto-sync off on this device');
+}
+
+// Reflect sync state in the Settings row.
+function updateSyncUI() {
+  const sess = getSyncSession();
+  const status = $('syncSettingsStatus');
+  const sub = $('syncSettingsSub');
+  if (status) {
+    status.textContent = sess?.sessionId ? 'On' : 'Off';
+    status.style.color = sess?.sessionId ? 'var(--accent, #4caf50)' : 'var(--text-faint)';
+  }
+  if (sub) sub.textContent = sess?.email ? `Backed up as ${sess.email}` : 'Back up your log so an uninstall never wipes it';
+}
+
+function setupSync() {
+  updateSyncUI();
+  $('settingSync')?.addEventListener('click', () => {
+    const sess = getSyncSession();
+    if (sess?.sessionId) {
+      if (confirm(`Auto-sync is on (${sess.email}). Turn it off on this device?\n\nYour rides stay backed up in the cloud — you can sign back in anytime.`)) signOutSync();
+    } else {
+      const email = prompt('Enter your email to turn on auto-sync.\nWe’ll send a one-time sign-in link.');
+      if (email == null) return;
+      requestSyncSignIn(email);
+    }
+  });
+}
+
 // ─── BOOT ─────────────────────────────────────────────────────
 init();
 
 // Check for a newer deploy shortly after load and whenever the app regains focus.
 setTimeout(checkForUpdate, 4000);
 setTimeout(autoSyncStrava, 3000); // background Strava refresh shortly after open
+
+// Cloud log sync: finish any magic-link sign-in, then pull the server copy.
+handleSyncCallback().then(() => { if (getSyncSession()?.sessionId) syncPull(); });
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') { checkForUpdate(); autoSyncStrava(); }
+  if (document.visibilityState === 'visible') { checkForUpdate(); autoSyncStrava(); syncPull(); }
 });
 
 // ─── CONFIDENCE ───────────────────────────────────────────────
